@@ -1,0 +1,13 @@
+{
+  "Author": "Brandon Marquis Markail Green (Space Baby)",
+  "Description": "This mod will allow the Farmer to increase Friendship by supporting the community",
+  "EntryDll": "SB_PotC.dll",
+  "Name": "Part of the Community",
+  "UniqueID": "SB_PotC",
+  "Version": {
+    "MajorVersion": 1,
+    "MinorVersion": 0,
+    "PatchVersion": 0,
+    "Build": "1.00"
+  }
+}
