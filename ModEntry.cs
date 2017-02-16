@@ -15,6 +15,11 @@ namespace SB_PotC
 
     public class ModEntry : Mod
     {
+        public const int hasTalked = 0;
+        public const int recievedGift = 1;
+        public const int relationsGifted = 2;
+        public const int timesWitnessed = 3;
+
         public SerializableDictionary<string, SerializableDictionary<string, string>> characterRelationships;
         public SerializableDictionary<string, int[]> witnessCount;
         public SerializableDictionary<string, bool> hasShoppedinStore;
@@ -83,7 +88,7 @@ namespace SB_PotC
                 {
                     if (!witnessCount.ContainsKey(name))
                         witnessCount.Add(name, new int[4]);
-                    if (witnessCount[name][1] < 1)
+                    if (witnessCount[name][recievedGift] < 1)
                     {
                         CheckRelationshipData(name);
                         // if the gift made the reciever decrease their friendship, do nothing, else
@@ -93,16 +98,16 @@ namespace SB_PotC
                                 witnessCount.Add(relation, new int[4]);
                             if (Game1.player.spouse.Equals(relation) && Game1.getCharacterFromName(relation, false).divorcedFromFarmer)
                             {
-                                witnessCount[relation][1] = 1;
+                                witnessCount[relation][recievedGift] = 1;
                                 continue;
                             }
                             CheckRelationshipData(relation);
-                            if (witnessCount[relation][2] < this.characterRelationships[relation].Count)
+                            if (witnessCount[relation][relationsGifted] < this.characterRelationships[relation].Count)
                             {
-                                witnessCount[relation][2]++;
+                                witnessCount[relation][relationsGifted]++;
                             }
                         }
-                        witnessCount[name][1] = 1;
+                        witnessCount[name][recievedGift] = 1;
                     }
                 }
                 //check if player is talking to a NPC
@@ -110,7 +115,7 @@ namespace SB_PotC
                 {
                     if (!witnessCount.ContainsKey(name))
                         witnessCount.Add(name, new int[4]);
-                    if (witnessCount[name][0] < 1)
+                    if (witnessCount[name][hasTalked] < 1)
                     {
                         CheckRelationshipData(name);
                         foreach (Character characterWithinDistance in areThereCharactersWithinDistance(Game1.player.getTileLocation(), 20, Game1.player.currentLocation))
@@ -122,9 +127,17 @@ namespace SB_PotC
                             }
                             else
                             {
-                                characterWithinDistance.doEmote(32, true);
-                                Game1.player.changeFriendship(config.witnessBonus, (characterWithinDistance as NPC));
-                                this.Monitor.Log(String.Format("{0} saw you taking to a villager. Updated Friendship: {0}", characterWithinDistance.name), LogLevel.Info);
+                                if (!witnessCount.ContainsKey(characterWithinDistance.name))
+                                {
+                                    witnessCount.Add(characterWithinDistance.name, new int[4]);
+                                }
+                                witnessCount[characterWithinDistance.name][3]++;
+                                if(witnessCount[characterWithinDistance.name][3] != 0 && (witnessCount[characterWithinDistance.name][3] & (witnessCount[characterWithinDistance.name][3] - 1 )) == 0)
+                                {
+                                    characterWithinDistance.doEmote(32, true);
+                                    Game1.player.changeFriendship(config.witnessBonus, (characterWithinDistance as NPC));
+                                    this.Monitor.Log(String.Format("{0} saw you taking to a villager. Updated Friendship: {0}", characterWithinDistance.name), LogLevel.Info);
+                                }
                             }
                         }
                         witnessCount[name][0] = 1;
@@ -218,7 +231,7 @@ namespace SB_PotC
                     }
                     else
                     {
-                        Game1.player.changeFriendship(config.umojaBonusMarry /2, Game1.getCharacterFromName(relation));
+                        Game1.player.changeFriendship(config.umojaBonusMarry / 2, Game1.getCharacterFromName(relation));
                         Monitor.Log(string.Format("{0}: Married a friend, recieved +{1} friendship", relation, config.umojaBonusMarry /2), LogLevel.Info);
                     }
                 }
