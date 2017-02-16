@@ -14,11 +14,13 @@ namespace SB_PotC
         public int ujimaBonusStore { get; set; }
         public int ujimaBonus { get; set; }
         public int kuumbaBonus { get; set; }
+        public bool hasGottenInitialUjimaBonus { get; set; }
+        public bool hasGottenInitialKuumbaBonus { get; set; }
 
         public ModConfig()
         {
             witnessBonus = 4;
-            storytellerBonus = 4;
+            storytellerBonus = 2;
             ujamaaBonus = 4;
             umojaBonus = 10;
             umojaBonusFestival = 16;
@@ -26,6 +28,8 @@ namespace SB_PotC
             ujimaBonusStore = 20;
             ujimaBonus = 2;
             kuumbaBonus = 2;
+            hasGottenInitialUjimaBonus = false;
+            hasGottenInitialKuumbaBonus = false;
         }
     }
 }

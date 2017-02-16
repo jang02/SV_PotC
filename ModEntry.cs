@@ -15,6 +15,8 @@ namespace SB_PotC
 
     public class ModEntry : Mod
     {
+        string[] storeOwners = new string[] { "Pierre", "Gus", "Clint", "Marnie", "Robin", "Sandy", "Willy" };
+
         public const int hasTalked = 0;
         public const int recievedGift = 1;
         public const int relationsGifted = 2;
@@ -34,7 +36,6 @@ namespace SB_PotC
 
         public override void Entry(IModHelper helper)
         {
-            config = helper.ReadConfig<ModConfig>();
 
             if (this.characterRelationships == null || this.witnessCount == null)
             {
@@ -46,16 +47,45 @@ namespace SB_PotC
             GameEvents.UpdateTick += this.ModUpdate;
             SaveEvents.AfterLoad += this.setVariables;
             SaveEvents.BeforeSave += this.EndOfDayUpdate;
+            SaveEvents.AfterSave += this.saveConfigFile;
             hasShoppedinStore = new SerializableDictionary<string, bool>();
-            currentNumberOfCompletedBundles = 0;
             hasRecentlyCompletedQuest = false;
             daysAfterCompletingLastDailyQuest = -1;
-            currentUniqueItemsShipped = 0;
             allInitiated = false;
+        }
+
+        private void saveConfigFile(object sender, EventArgs e)
+        {
+            Helper.WriteJsonFile($"{Constants.SaveFolderName}/config.json", config);
         }
 
         private void setVariables(object sender, EventArgs e)
         {
+            config = Helper.ReadJsonFile<ModConfig>($"{Constants.SaveFolderName}/config.json") ?? new ModConfig();
+            foreach (string name in Game1.player.friendships.Keys)
+            {
+                CheckRelationshipData(name);
+            }
+            currentNumberOfCompletedBundles = (Game1.getLocationFromName("CommunityCenter") as CommunityCenter).numberOfCompleteBundles();
+            if (!config.hasGottenInitialUjimaBonus)
+            {
+                foreach (string storeOwner in storeOwners)
+                {
+                    Game1.player.changeFriendship((config.ujimaBonus * currentNumberOfCompletedBundles), Game1.getCharacterFromName(storeOwner));
+                }
+                Monitor.Log(string.Format("You have gained {0} friendship from all store owners for completing {1} {2}",
+                    (20 * currentNumberOfCompletedBundles), (currentNumberOfCompletedBundles), currentNumberOfCompletedBundles > 1 ? "Bundles" : "Bundle" ), LogLevel.Info);
+                config.hasGottenInitialUjimaBonus = true;
+            }
+            currentUniqueItemsShipped = Game1.player.basicShipped.Count;
+            if (!config.hasGottenInitialKuumbaBonus)
+            {
+                int friendshipPoints = config.kuumbaBonus * currentUniqueItemsShipped;
+                Utility.improveFriendshipWithEveryoneInRegion(Game1.player, friendshipPoints, 2);
+                Monitor.Log(string.Format("Gained {0} friendship for shipping {1} unique {2}"
+                    , friendshipPoints, currentUniqueItemsShipped, currentUniqueItemsShipped != 1? "items" : "item"), LogLevel.Info);
+                config.hasGottenInitialKuumbaBonus = true;
+            }
             currentNumberOfCompletedDailyQuests = Game1.stats.questsCompleted;
             allInitiated = true;
         }
@@ -136,7 +166,7 @@ namespace SB_PotC
                                 {
                                     characterWithinDistance.doEmote(32, true);
                                     Game1.player.changeFriendship(config.witnessBonus, (characterWithinDistance as NPC));
-                                    this.Monitor.Log(String.Format("{0} saw you taking to a villager. Updated Friendship: {0}", characterWithinDistance.name), LogLevel.Info);
+                                    this.Monitor.Log(String.Format("{0} saw you taking to a {1}. +{2} Friendship: {0}", characterWithinDistance.name, name, config.witnessBonus), LogLevel.Info);
                                 }
                             }
                         }
@@ -283,7 +313,6 @@ namespace SB_PotC
             if (currentNumberOfCompletedBundles < (Game1.getLocationFromName("CommunityCenter") as CommunityCenter).numberOfCompleteBundles())
             {
                 int newNumberOfCompletedBundles = (Game1.getLocationFromName("CommunityCenter") as CommunityCenter).numberOfCompleteBundles();
-                string[] storeOwners = new string[] { "Pierre", "Gus", "Clint", "Marnie", "Robin", "Sandy", "Willy" };
                 foreach (string storeOwner in storeOwners)
                 {
                     Game1.player.changeFriendship((config.ujimaBonus * newNumberOfCompletedBundles), Game1.getCharacterFromName(storeOwner));
@@ -314,7 +343,7 @@ namespace SB_PotC
             //Check if any new items were shipped
             if(Game1.player.basicShipped.Count > currentUniqueItemsShipped)
             {
-                int friendshipPoints = config.kuumbaBonus * (Game1.player.basicShipped.Count + currentUniqueItemsShipped);
+                int friendshipPoints = config.kuumbaBonus * (Game1.player.basicShipped.Count - currentUniqueItemsShipped);
                 Utility.improveFriendshipWithEveryoneInRegion(Game1.player, friendshipPoints, 2);
                 Monitor.Log(string.Format("Gained {0} friendship for shipping items", friendshipPoints), LogLevel.Info);
                 currentUniqueItemsShipped = Game1.player.basicShipped.Count;
@@ -431,7 +460,7 @@ namespace SB_PotC
                         characterRelationships[name].Add("Jas", "Goddaughter");
                         characterRelationships[name].Add("Emily", "Friend");
                         return;
-                    case "Elliot":
+                    case "Elliott":
                         characterRelationships[name].Add("Willy", "Friend");
                         characterRelationships[name].Add("Leah", "Friend");
                         return;
@@ -463,7 +492,7 @@ namespace SB_PotC
                         characterRelationships[name].Add("Emily", "Admire");
                         return;
                     case "Leah":
-                        characterRelationships[name].Add("Elliot", "Friend");
+                        characterRelationships[name].Add("Elliott", "Friend");
                         return;
                     case "Lewis":
                         characterRelationships[name].Add("Marnie", "Frind");
@@ -472,7 +501,7 @@ namespace SB_PotC
                         characterRelationships[name].Add("Emily", "Friend");
                         return;
                     case "Willy":
-                        characterRelationships[name].Add("Elliot", "Friend");
+                        characterRelationships[name].Add("Elliott", "Friend");
                         return;
                     default:
                         break;
