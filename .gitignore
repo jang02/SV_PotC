@@ -1,0 +1,7 @@
+*.csproj
+*.user
+packages.config
+bin/
+obj/
+Properties/
+Service References/
