@@ -19,8 +19,8 @@ namespace SB_PotC
 
         public ModConfig()
         {
-            witnessBonus = 4;
-            storytellerBonus = 2;
+            witnessBonus = 2;
+            storytellerBonus = 4;
             ujamaaBonus = 4;
             umojaBonus = 10;
             umojaBonusFestival = 16;
