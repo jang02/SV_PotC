@@ -65,6 +65,7 @@ namespace SB_PotC
             foreach (string name in Game1.player.friendships.Keys)
             {
                 CheckRelationshipData(name);
+                witnessCount.Add(name, new int[4]);
             }
             currentNumberOfCompletedBundles = (Game1.getLocationFromName("CommunityCenter") as CommunityCenter).numberOfCompleteBundles();
             if (!config.hasGottenInitialUjimaBonus)
@@ -95,7 +96,7 @@ namespace SB_PotC
             List<Character> charactersWithinDistance = new List<Character>();
             foreach (Character character in environment.characters)
             {
-                if ((double)Vector2.Distance(character.getTileLocation(), tileLocation) <= (double)tilesAway)
+                if (character != null && (double)Vector2.Distance(character.getTileLocation(), tileLocation) <= (double)tilesAway)
                     charactersWithinDistance.Add(character);
             }
             return charactersWithinDistance;
@@ -124,13 +125,10 @@ namespace SB_PotC
                         // if the gift made the reciever decrease their friendship, do nothing, else
                         foreach (string relation in this.characterRelationships[name].Keys.ToArray())
                         {
+                            if (string.IsNullOrEmpty(relation)) continue;
                             if (!witnessCount.ContainsKey(relation))
                                 witnessCount.Add(relation, new int[4]);
-                            if (Game1.player.spouse.Equals(relation) && Game1.getCharacterFromName(relation, false).divorcedFromFarmer)
-                            {
-                                witnessCount[relation][recievedGift] = 1;
-                                continue;
-                            }
+                            if (Game1.player.isDivorced() && Game1.getCharacterFromName(relation, false).divorcedFromFarmer) continue;
                             CheckRelationshipData(relation);
                             if (witnessCount[relation][relationsGifted] < this.characterRelationships[relation].Count)
                             {
@@ -232,7 +230,7 @@ namespace SB_PotC
                 foreach (String name in Game1.player.friendships.Keys.ToArray())
                 {
                     NPC character = Game1.getCharacterFromName(name);
-                    if (character.currentLocation == Game1.currentLocation)
+                    if (character != null && character.currentLocation == Game1.currentLocation)
                     {
                         if ((Game1.player.isDivorced() == true) && Game1.player.spouse.Equals(character.name))
                         {
@@ -318,7 +316,7 @@ namespace SB_PotC
                     Game1.player.changeFriendship((config.ujimaBonus * newNumberOfCompletedBundles), Game1.getCharacterFromName(storeOwner));
                 }
                 Monitor.Log(string.Format("You have gained {0} friendship from all store owners for completing {1} Bundle today",
-                    (20 * newNumberOfCompletedBundles), (newNumberOfCompletedBundles - currentNumberOfCompletedBundles)), LogLevel.Info);
+                    (20 * (newNumberOfCompletedBundles - currentNumberOfCompletedBundles)), (newNumberOfCompletedBundles - currentNumberOfCompletedBundles)), LogLevel.Info);
                 currentNumberOfCompletedBundles = newNumberOfCompletedBundles;
             }
             //Update the Daily Quest Counters
