@@ -72,6 +72,7 @@ namespace SB_PotC
             {
                 foreach (string storeOwner in storeOwners)
                 {
+                    if (Game1.getCharacterFromName(storeOwner) == null) continue;
                     Game1.player.changeFriendship((config.ujimaBonus * currentNumberOfCompletedBundles), Game1.getCharacterFromName(storeOwner));
                 }
                 Monitor.Log(string.Format("You have gained {0} friendship from all store owners for completing {1} {2}",
@@ -107,13 +108,13 @@ namespace SB_PotC
         *********/
         private void ModUpdate(object sender, EventArgs e)
         {
+            if (!allInitiated) return;
+            if (Game1.player == null) return;
             foreach (string name in Game1.player.friendships.Keys.ToArray())
             {
+                if (Game1.getCharacterFromName(name, false) == null) continue;
                 // if the NPC was divorced by the player, nothing occurs
-                if (Game1.player.isDivorced() && Game1.player.spouse.Equals(name))
-                {
-                    continue;
-                }
+                if (Game1.player.isDivorced() && Game1.player.spouse.Equals(name)) continue;
                 //check if Player gave NPC a gift
                 if (Game1.player.friendships[name][3] == 1)
                 {
@@ -126,6 +127,7 @@ namespace SB_PotC
                         foreach (string relation in this.characterRelationships[name].Keys.ToArray())
                         {
                             if (string.IsNullOrEmpty(relation)) continue;
+                            if (Game1.getCharacterFromName(relation, false) == null) continue;
                             if (!witnessCount.ContainsKey(relation))
                                 witnessCount.Add(relation, new int[4]);
                             if (Game1.player.isDivorced() && Game1.getCharacterFromName(relation, false).divorcedFromFarmer) continue;
@@ -146,9 +148,11 @@ namespace SB_PotC
                     if (witnessCount[name][hasTalked] < 1)
                     {
                         CheckRelationshipData(name);
-                        foreach (Character characterWithinDistance in areThereCharactersWithinDistance(Game1.player.getTileLocation(), 20, Game1.player.currentLocation))
+                        List<Character> charactersWithinDistance = areThereCharactersWithinDistance(Game1.player.getTileLocation(), 20, Game1.player.currentLocation);
+                        foreach (Character characterWithinDistance in charactersWithinDistance)
                         {
                             if (characterWithinDistance.name == name) continue;
+                            if (characterWithinDistance == null) continue;
                             if ((Game1.player.isDivorced() == true) && Game1.player.spouse.Equals(characterWithinDistance.name))
                             {
                                 characterWithinDistance.doEmote(12, true);
@@ -168,13 +172,13 @@ namespace SB_PotC
                                 }
                             }
                         }
-                        witnessCount[name][0] = 1;
+                        witnessCount[name][hasTalked] = 1;
                     }
                 }
             }
             //Check if the player is actively shopping
             //TODO: Add the Bus/Pam
-            if (Game1.activeClickableMenu is ShopMenu)
+            if (Game1.activeClickableMenu != null && Game1.activeClickableMenu is ShopMenu)
             {
                 Item heldItem = this.Helper.Reflection.GetPrivateValue<Item>(Game1.activeClickableMenu as ShopMenu, "heldItem");
                 if (heldItem != null)
@@ -214,9 +218,9 @@ namespace SB_PotC
                     {
                         if (!hasShoppedinStore.ContainsKey(shopOwner))
                             hasShoppedinStore.Add(shopOwner, false);
-                        if (hasShoppedinStore[shopOwner] == false)
+                        if ((Game1.getCharacterFromName(shopOwner, false) != null) && hasShoppedinStore[shopOwner] == false)
                         {
-                            Game1.player.changeFriendship(config.ujamaaBonus, Game1.getCharacterFromName(shopOwner, true));
+                            Game1.player.changeFriendship(config.ujamaaBonus, Game1.getCharacterFromName(shopOwner, false));
                             this.Monitor.Log(String.Format("{0}: Pleasure doing business with you!", shopOwner), LogLevel.Info);
                             hasShoppedinStore[shopOwner] = true;
                         }
@@ -252,6 +256,7 @@ namespace SB_PotC
                 SerializableDictionary<string, string> relationships = characterRelationships[Game1.player.spouse];
                 foreach (string relation in relationships.Keys.ToArray())
                 {
+                    if (Game1.getCharacterFromName(relation) == null) continue;
                     if (!relationships[relation].ToLower().Contains("friend"))
                     {
                         Game1.player.changeFriendship(config.umojaBonusMarry, Game1.getCharacterFromName(relation));
@@ -279,10 +284,13 @@ namespace SB_PotC
             //Gifting, Talking
             foreach (string name in witnessCount.Keys.ToArray())
             {
+                if (Game1.getCharacterFromName(name, false) == null) continue;
                 if (witnessCount[name][1] > 0)
                 {
                     foreach (string relation in characterRelationships[name].Keys.ToArray())
                     {
+                        if (string.IsNullOrEmpty(relation)) continue;
+                        if (Game1.getCharacterFromName(relation, false) == null) continue;
                         if (witnessCount[relation][2] > 0)
                         {
                             Game1.player.changeFriendship(config.storytellerBonus * witnessCount[relation][2], Game1.getCharacterFromName(relation, false));
@@ -293,10 +301,12 @@ namespace SB_PotC
                     witnessCount[name][1] = 0;
                     witnessCount[name][3] = 0;
                 }
-                if ((Game1.player.spouse == name || (Game1.getCharacterFromName(name) is Child && (Game1.getCharacterFromName(name) as Child).isChildOf(Game1.player))) && witnessCount[name][0] == 1)
+                if (((Game1.player.isMarried()  && Game1.player.spouse == name) || (Game1.getCharacterFromName(name) is Child && (Game1.getCharacterFromName(name) as Child).isChildOf(Game1.player))) && witnessCount[name][0] == 1)
                 {
                     foreach (string relation in characterRelationships[name].Keys.ToArray())
                     {
+                        if (string.IsNullOrEmpty(relation)) continue;
+                        if (Game1.getCharacterFromName(relation, false) == null) continue;
                         if (characterRelationships[name][relation] != "Friend" && characterRelationships[name][relation] != "Wartorn")
                         {
                             Game1.player.changeFriendship(config.umojaBonus, Game1.getCharacterFromName(relation, false));
@@ -313,7 +323,8 @@ namespace SB_PotC
                 int newNumberOfCompletedBundles = (Game1.getLocationFromName("CommunityCenter") as CommunityCenter).numberOfCompleteBundles();
                 foreach (string storeOwner in storeOwners)
                 {
-                    Game1.player.changeFriendship((config.ujimaBonus * newNumberOfCompletedBundles), Game1.getCharacterFromName(storeOwner));
+                    if(Game1.getCharacterFromName(storeOwner) != null)
+                        Game1.player.changeFriendship((config.ujimaBonus * newNumberOfCompletedBundles), Game1.getCharacterFromName(storeOwner));
                 }
                 Monitor.Log(string.Format("You have gained {0} friendship from all store owners for completing {1} Bundle today",
                     (20 * (newNumberOfCompletedBundles - currentNumberOfCompletedBundles)), (newNumberOfCompletedBundles - currentNumberOfCompletedBundles)), LogLevel.Info);
