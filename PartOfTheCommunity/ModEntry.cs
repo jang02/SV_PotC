@@ -34,7 +34,7 @@ namespace SB_PotC
         private bool HasRecentlyCompletedQuest;
         private int DaysAfterCompletingLastDailyQuest;
         private int CurrentUniqueItemsShipped;
-        private bool AllInitiated;
+        private bool HasLoadedPlayerConfig;
         private ModConfig Config;
 
 
@@ -60,7 +60,7 @@ namespace SB_PotC
             this.HasShoppedInStore = new SerializableDictionary<string, bool>();
             this.HasRecentlyCompletedQuest = false;
             this.DaysAfterCompletingLastDailyQuest = -1;
-            this.AllInitiated = false;
+            this.HasLoadedPlayerConfig = false;
         }
 
 
@@ -101,7 +101,7 @@ namespace SB_PotC
                 this.Config.HasGottenInitialKuumbaBonus = true;
             }
             this.CurrentNumberOfCompletedDailyQuests = Game1.stats.questsCompleted;
-            this.AllInitiated = true;
+            this.HasLoadedPlayerConfig = true;
         }
 
         private static List<Character> AreThereCharactersWithinDistance(Vector2 tile, int tilesAway, GameLocation location)
@@ -117,7 +117,7 @@ namespace SB_PotC
 
         private void ModUpdate(object sender, EventArgs e)
         {
-            if (!this.AllInitiated || Game1.player == null)
+            if (!Game1.hasLoadedGame || SaveGame.IsProcessing || !this.HasLoadedPlayerConfig)
                 return;
 
             foreach (string name in Game1.player.friendships.Keys.ToArray())
@@ -136,7 +136,7 @@ namespace SB_PotC
                         this.WitnessCount.Add(name, new int[4]);
                     if (this.WitnessCount[name][ModEntry.ReceivedGift] < 1)
                     {
-                        CheckRelationshipData(name);
+                        this.CheckRelationshipData(name);
                         // if the gift made the reciever decrease their friendship, do nothing, else
                         foreach (string relation in this.CharacterRelationships[name].Keys.ToArray())
                         {
@@ -281,7 +281,7 @@ namespace SB_PotC
             }
 
             //Check if the Player recently completed a daily quest
-            if (this.AllInitiated && Game1.stats.questsCompleted > this.CurrentNumberOfCompletedDailyQuests)
+            if (Game1.stats.questsCompleted > this.CurrentNumberOfCompletedDailyQuests)
             {
                 this.DaysAfterCompletingLastDailyQuest = 0;
                 this.CurrentNumberOfCompletedDailyQuests = Game1.stats.questsCompleted;
