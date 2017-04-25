@@ -23,7 +23,6 @@ namespace SB_PotC
         private const int HasTalked = 0;
         private const int ReceivedGift = 1;
         private const int RelationsGifted = 2;
-        private const int TimesWitnessed = 3;
 
         private SerializableDictionary<string, SerializableDictionary<string, string>> CharacterRelationships;
         private SerializableDictionary<string, int[]> WitnessCount;
@@ -584,17 +583,6 @@ namespace SB_PotC
                     }
                 }
             }
-        }
-
-        public bool HasPlayerKissedWife()
-        {
-            return this.Helper.Reflection.GetPrivateValue<bool>(Game1.player.getSpouse(), "hasBeenKissedToday");
-        }
-
-        //When the Farmer's child is 0-1 years old, this is in lieu of talking to the tyke.
-        public bool HasPlayerTossChild()
-        {
-            return true;
         }
     }
 }
