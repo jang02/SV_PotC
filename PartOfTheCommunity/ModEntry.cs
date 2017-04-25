@@ -165,7 +165,7 @@ namespace SB_PotC
                         List<Character> charactersWithinDistance = ModEntry.AreThereCharactersWithinDistance(Game1.player.getTileLocation(), 20, Game1.player.currentLocation);
                         foreach (Character characterWithinDistance in charactersWithinDistance)
                         {
-                            if (characterWithinDistance.name == name || characterWithinDistance == null)
+                            if (characterWithinDistance == null || characterWithinDistance.name == name)
                                 continue;
                             if (Game1.player.isDivorced() && Game1.player.spouse.Equals(characterWithinDistance.name))
                                 characterWithinDistance.doEmote(12);
