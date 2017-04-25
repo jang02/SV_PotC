@@ -330,13 +330,14 @@ namespace SB_PotC
             }
 
             //Check if New Bundles were completed today
-            if (this.CurrentNumberOfCompletedBundles < (Game1.getLocationFromName("CommunityCenter") as CommunityCenter).numberOfCompleteBundles())
+            CommunityCenter communityCenter = (CommunityCenter)Game1.getLocationFromName("CommunityCenter");
+            if (this.CurrentNumberOfCompletedBundles < communityCenter.numberOfCompleteBundles())
             {
-                int newNumberOfCompletedBundles = (Game1.getLocationFromName("CommunityCenter") as CommunityCenter).numberOfCompleteBundles();
+                int newNumberOfCompletedBundles = communityCenter.numberOfCompleteBundles();
                 foreach (string storeOwner in this.StoreOwners)
                 {
                     if (Game1.getCharacterFromName(storeOwner) != null)
-                        Game1.player.changeFriendship((this.Config.UjimaBonus * newNumberOfCompletedBundles), Game1.getCharacterFromName(storeOwner));
+                        Game1.player.changeFriendship(this.Config.UjimaBonus * newNumberOfCompletedBundles, Game1.getCharacterFromName(storeOwner));
                 }
                 this.Monitor.Log($"You have gained {20 * (newNumberOfCompletedBundles - this.CurrentNumberOfCompletedBundles)} friendship from all store owners for completing {newNumberOfCompletedBundles - this.CurrentNumberOfCompletedBundles} Bundle today", LogLevel.Info);
                 this.CurrentNumberOfCompletedBundles = newNumberOfCompletedBundles;
