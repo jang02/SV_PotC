@@ -33,7 +33,7 @@ namespace SB_PotC
         private bool HasRecentlyCompletedQuest;
         private int DaysAfterCompletingLastDailyQuest;
         private int CurrentUniqueItemsShipped;
-        private bool HasLoadedPlayerConfig;
+        private bool IsReady;
         private ModConfig Config;
 
 
@@ -54,12 +54,13 @@ namespace SB_PotC
             }
             GameEvents.UpdateTick += this.ModUpdate;
             SaveEvents.AfterLoad += this.SetVariables;
+            SaveEvents.AfterReturnToTitle += this.Reset;
             SaveEvents.BeforeSave += this.EndOfDayUpdate;
             SaveEvents.AfterSave += this.SaveConfigFile;
             this.HasShoppedInStore = new SerializableDictionary<string, bool>();
             this.HasRecentlyCompletedQuest = false;
             this.DaysAfterCompletingLastDailyQuest = -1;
-            this.HasLoadedPlayerConfig = false;
+            this.IsReady = false;
         }
 
 
@@ -100,7 +101,22 @@ namespace SB_PotC
                 this.Config.HasGottenInitialKuumbaBonus = true;
             }
             this.CurrentNumberOfCompletedDailyQuests = Game1.stats.questsCompleted;
-            this.HasLoadedPlayerConfig = true;
+            this.IsReady = true;
+        }
+
+        private void Reset(object sender, EventArgs e)
+        {
+            this.IsReady = false;
+            this.Config = null;
+            this.CharacterRelationships.Clear();
+            this.WitnessCount.Clear();
+            this.HasShoppedInStore.Clear();
+            this.HasEnteredEvent = false;
+            this.HasRecentlyCompletedQuest = false;
+            this.CurrentNumberOfCompletedBundles = 0;
+            this.CurrentNumberOfCompletedDailyQuests = 0;
+            this.CurrentUniqueItemsShipped = 0;
+            this.DaysAfterCompletingLastDailyQuest = 0;
         }
 
         private static List<Character> AreThereCharactersWithinDistance(Vector2 tile, int tilesAway, GameLocation location)
@@ -116,7 +132,7 @@ namespace SB_PotC
 
         private void ModUpdate(object sender, EventArgs e)
         {
-            if (!Game1.hasLoadedGame || SaveGame.IsProcessing || !this.HasLoadedPlayerConfig)
+            if (!Game1.hasLoadedGame || SaveGame.IsProcessing || !this.IsReady)
                 return;
 
             foreach (string name in Game1.player.friendships.Keys.ToArray())
