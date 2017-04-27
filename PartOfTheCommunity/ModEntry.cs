@@ -141,7 +141,7 @@ namespace SB_PotC
                     continue;
 
                 // if the NPC was divorced by the player, nothing occurs
-                if (Game1.player.isDivorced() && Game1.player.spouse.Equals(name))
+                if (Game1.getCharacterFromName(name).divorcedFromFarmer)
                     continue;
 
                 //check if Player gave NPC a gift
@@ -159,7 +159,7 @@ namespace SB_PotC
                                 continue;
                             if (!this.WitnessCount.ContainsKey(relation))
                                 this.WitnessCount.Add(relation, new int[4]);
-                            if (Game1.player.isDivorced() && Game1.getCharacterFromName(relation).divorcedFromFarmer)
+                            if (Game1.getCharacterFromName(relation).divorcedFromFarmer)
                                 continue;
                             CheckRelationshipData(relation);
                             if (this.WitnessCount[relation][ModEntry.RelationsGifted] < this.CharacterRelationships[relation].Count)
@@ -182,7 +182,7 @@ namespace SB_PotC
                         {
                             if (characterWithinDistance == null || characterWithinDistance.name == name)
                                 continue;
-                            if (Game1.player.isDivorced() && Game1.player.spouse.Equals(characterWithinDistance.name))
+                            if (Game1.getCharacterFromName(characterWithinDistance.name).divorcedFromFarmer)
                                 characterWithinDistance.doEmote(12);
                             else
                             {
@@ -263,7 +263,7 @@ namespace SB_PotC
                     NPC character = Game1.getCharacterFromName(name);
                     if (character != null && character.currentLocation == Game1.currentLocation)
                     {
-                        if (Game1.player.isDivorced() && Game1.player.spouse.Equals(character.name))
+                        if (character.divorcedFromFarmer)
                             character.doEmote(12);
                         else
                             character.doEmote(32);
