@@ -255,22 +255,25 @@ namespace SB_PotC
             }
 
             // Check if the Player has entered a festival
-            if (Game1.currentLocation != null && Game1.currentLocation.currentEvent != null && Game1.player.currentLocation.currentEvent.isFestival && this.HasEnteredEvent == false)
+            if (this.HasEnteredEvent == false)
             {
-                Utility.improveFriendshipWithEveryoneInRegion(Game1.player, this.Config.UmojaBonusFestival, 2);
-                foreach (string name in Game1.player.friendships.Keys.ToArray())
+                if (Game1.currentLocation != null && Game1.currentLocation.currentEvent != null && Game1.player.currentLocation.currentEvent.isFestival)
                 {
-                    NPC character = Game1.getCharacterFromName(name);
-                    if (character != null && character.currentLocation == Game1.currentLocation)
+                    Utility.improveFriendshipWithEveryoneInRegion(Game1.player, this.Config.UmojaBonusFestival, 2);
+                    foreach (string name in Game1.player.friendships.Keys.ToArray())
                     {
-                        if (character.divorcedFromFarmer)
-                            character.doEmote(12);
-                        else
-                            character.doEmote(32);
+                        NPC character = Game1.getCharacterFromName(name);
+                        if (character != null && character.currentLocation == Game1.currentLocation)
+                        {
+                            if (character.divorcedFromFarmer)
+                                character.doEmote(12);
+                            else
+                                character.doEmote(32);
+                        }
                     }
+                    this.Monitor.Log("The Villagers Are glad you came!", LogLevel.Info);
+                    this.HasEnteredEvent = true;
                 }
-                this.Monitor.Log("The Villagers Are glad you came!", LogLevel.Info);
-                this.HasEnteredEvent = true;
             }
 
             // Check if the Player is getting married or having a baby
