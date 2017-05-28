@@ -403,7 +403,7 @@ namespace SB_PotC
                     case "Sam":
                         this.CharacterRelationships[name].Add("Jodi", "Mother");
                         this.CharacterRelationships[name].Add("Kent", "Father");
-                        this.CharacterRelationships[name].Add(name == "Vincent" ? "Alex" : "Vincent", "Brother");
+                        this.CharacterRelationships[name].Add(name == "Vincent" ? "Sam" : "Vincent", "Brother");
                         if (name.Equals("Vincent"))
                             this.CharacterRelationships[name].Add("Jas", "Friend");
                         else
