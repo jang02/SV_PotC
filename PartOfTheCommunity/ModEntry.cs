@@ -75,7 +75,7 @@ namespace SB_PotC
         private void SetVariables(object sender, EventArgs e)
         {
             this.Config = this.Helper.ReadJsonFile<ModConfig>($"{Constants.SaveFolderName}/config.json") ?? new ModConfig();
-            foreach (string name in Game1.player.friendships.Keys)
+            foreach (string name in Game1.player.friendshipData.Keys)
             {
                 this.CheckRelationshipData(name);
                 this.WitnessCount.Add(name, new int[4]);
@@ -135,17 +135,17 @@ namespace SB_PotC
             if (!Game1.hasLoadedGame || SaveGame.IsProcessing || !this.IsReady)
                 return;
 
-            foreach (string name in Game1.player.friendships.Keys.ToArray())
+            foreach (string name in Game1.player.friendshipData.Keys.ToArray())
             {
                 if (Game1.getCharacterFromName(name) == null)
                     continue;
 
                 // if the NPC was divorced by the player, nothing occurs
-                if (Game1.getCharacterFromName(name).divorcedFromFarmer)
+                if (Game1.player.friendshipData[name].IsDivorced())
                     continue;
 
                 //check if Player gave NPC a gift
-                if (Game1.player.friendships[name][3] == 1)
+                if (Game1.player.friendshipData[name].GiftsToday == 1)
                 {
                     if (!this.WitnessCount.ContainsKey(name))
                         this.WitnessCount.Add(name, new int[4]);
@@ -159,7 +159,8 @@ namespace SB_PotC
                                 continue;
                             if (!this.WitnessCount.ContainsKey(relation))
                                 this.WitnessCount.Add(relation, new int[4]);
-                            if (Game1.getCharacterFromName(relation).divorcedFromFarmer)
+                            
+                            if (Game1.player.friendshipData[relation].IsDivorced())
                                 continue;
                             CheckRelationshipData(relation);
                             if (this.WitnessCount[relation][ModEntry.RelationsGifted] < this.CharacterRelationships[relation].Count)
@@ -180,20 +181,20 @@ namespace SB_PotC
                         List<Character> charactersWithinDistance = ModEntry.AreThereCharactersWithinDistance(Game1.player.getTileLocation(), 20, Game1.player.currentLocation);
                         foreach (Character characterWithinDistance in charactersWithinDistance)
                         {
-                            if (characterWithinDistance == null || characterWithinDistance.name == name)
+                            if (characterWithinDistance == null || characterWithinDistance.Name == name)
                                 continue;
-                            if (Game1.getCharacterFromName(characterWithinDistance.name).divorcedFromFarmer)
+                            if (Game1.player.friendshipData[characterWithinDistance.Name].IsDivorced())
                                 characterWithinDistance.doEmote(12);
                             else
                             {
-                                if (!this.WitnessCount.ContainsKey(characterWithinDistance.name))
-                                    this.WitnessCount.Add(characterWithinDistance.name, new int[4]);
-                                this.WitnessCount[characterWithinDistance.name][3]++;
-                                if (this.WitnessCount[characterWithinDistance.name][3] != 0 && (this.WitnessCount[characterWithinDistance.name][3] & (this.WitnessCount[characterWithinDistance.name][3] - 1)) == 0)
+                                if (!this.WitnessCount.ContainsKey(characterWithinDistance.Name))
+                                    this.WitnessCount.Add(characterWithinDistance.Name, new int[4]);
+                                this.WitnessCount[characterWithinDistance.Name][3]++;
+                                if (this.WitnessCount[characterWithinDistance.Name][3] != 0 && (this.WitnessCount[characterWithinDistance.Name][3] & (this.WitnessCount[characterWithinDistance.Name][3] - 1)) == 0)
                                 {
                                     characterWithinDistance.doEmote(32);
                                     Game1.player.changeFriendship(this.Config.WitnessBonus, (characterWithinDistance as NPC));
-                                    this.Monitor.Log($"{characterWithinDistance.name} saw you taking to a {name}. +{this.Config.WitnessBonus} Friendship: {characterWithinDistance.name}", LogLevel.Info);
+                                    this.Monitor.Log($"{characterWithinDistance.Name} saw you taking to a {name}. +{this.Config.WitnessBonus} Friendship: {characterWithinDistance.Name}", LogLevel.Info);
                                 }
                             }
                         }
@@ -206,11 +207,11 @@ namespace SB_PotC
             //TODO: Add the Bus/Pam
             if (Game1.activeClickableMenu is ShopMenu shopMenu)
             {
-                Item heldItem = this.Helper.Reflection.GetPrivateValue<Item>(shopMenu, "heldItem");
+                Item heldItem = this.Helper.Reflection.GetField<Item>(shopMenu, "heldItem").GetValue();
                 if (heldItem != null)
                 {
                     string shopOwner = "";
-                    switch (Game1.currentLocation.name)
+                    switch (Game1.currentLocation.Name)
                     {
                         case "SeedShop":
                             shopOwner = "Pierre";
@@ -260,12 +261,12 @@ namespace SB_PotC
                 if (Game1.currentLocation != null && Game1.currentLocation.currentEvent != null && Game1.player.currentLocation.currentEvent.isFestival)
                 {
                     Utility.improveFriendshipWithEveryoneInRegion(Game1.player, this.Config.UmojaBonusFestival, 2);
-                    foreach (string name in Game1.player.friendships.Keys.ToArray())
+                    foreach (string name in Game1.player.friendshipData.Keys.ToArray())
                     {
                         NPC character = Game1.getCharacterFromName(name);
                         if (character != null && character.currentLocation == Game1.currentLocation)
                         {
-                            if (character.divorcedFromFarmer)
+                            if (Game1.player.friendshipData[name].IsDivorced())
                                 character.doEmote(12);
                             else
                                 character.doEmote(32);
@@ -594,10 +595,10 @@ namespace SB_PotC
                     // Check for the other children. They might be from another marriage
                     foreach (Child getChildren in Game1.player.getChildren())
                     {
-                        if (getChildren.name != name && !this.CharacterRelationships[name].ContainsKey(getChildren.name))
+                        if (getChildren.Name != name && !this.CharacterRelationships[name].ContainsKey(getChildren.Name))
                         {
-                            this.CharacterRelationships[name].Add(getChildren.name, "Half-" + (Utility.isMale(getChildren.name) ? "Brother" : "Sister"));
-                            this.CharacterRelationships[getChildren.name].Add(name, "Half-" + (Utility.isMale(getChildren.name) ? "Brother" : "Sister"));
+                            this.CharacterRelationships[name].Add(getChildren.Name, "Half-" + (Utility.isMale(getChildren.Name) ? "Brother" : "Sister"));
+                            this.CharacterRelationships[getChildren.Name].Add(name, "Half-" + (Utility.isMale(getChildren.Name) ? "Brother" : "Sister"));
                         }
                     }
                 }
