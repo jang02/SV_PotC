@@ -330,8 +330,8 @@ namespace SB_PotC
                     }
                     this.WitnessCount[name][1] = 0;
                     this.WitnessCount[name][3] = 0;
-                }
-                if (((Game1.player.isMarried() && Game1.player.spouse == name) || (Game1.getCharacterFromName(name) is Child child && child.isChildOf(Game1.player))) && this.WitnessCount[name][0] == 1)
+				}
+				if (((Game1.player.isMarried() && Game1.player.spouse == name) || (Game1.getCharacterFromName(name) is Child child && child.idOfParent == Game1.player.UniqueMultiplayerID)) && this.WitnessCount[name][0] == 1)
                 {
                     foreach (string relation in this.CharacterRelationships[name].Keys.ToArray())
                     {
@@ -538,7 +538,7 @@ namespace SB_PotC
                 }
 
                 //Check for Relationships of your children
-                if (Game1.getCharacterFromName(name) is Child child && child.isChildOf(Game1.player))
+				if (Game1.getCharacterFromName(name) is Child child && child.idOfParent == Game1.player.UniqueMultiplayerID)
                 {
                     CheckRelationshipData(Game1.player.spouse);
                     this.CharacterRelationships[name].Add(Game1.player.spouse, Utility.isMale(Game1.player.spouse) ? "Father" : "Mother");
