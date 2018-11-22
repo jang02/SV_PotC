@@ -69,12 +69,12 @@ namespace SB_PotC
         *********/
         private void SaveConfigFile(object sender, EventArgs e)
         {
-            this.Helper.WriteJsonFile($"{Constants.SaveFolderName}/config.json", this.Config);
+            this.Helper.Data.WriteJsonFile($"{Constants.SaveFolderName}/config.json", this.Config);
         }
 
         private void SetVariables(object sender, EventArgs e)
         {
-            this.Config = this.Helper.ReadJsonFile<ModConfig>($"{Constants.SaveFolderName}/config.json") ?? new ModConfig();
+            this.Config = this.Helper.Data.ReadJsonFile<ModConfig>($"{Constants.SaveFolderName}/config.json") ?? new ModConfig();
             foreach (string name in Game1.player.friendshipData.Keys)
             {
                 this.CheckRelationshipData(name);
