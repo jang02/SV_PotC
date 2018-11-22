@@ -135,17 +135,19 @@ namespace SB_PotC
             if (!Game1.hasLoadedGame || SaveGame.IsProcessing || !this.IsReady)
                 return;
 
-            foreach (string name in Game1.player.friendshipData.Keys.ToArray())
+            foreach (KeyValuePair<string, Friendship> pair in Game1.player.friendshipData.Pairs)
             {
+                string name = pair.Key;
+                Friendship curFriendship = pair.Value;
                 if (Game1.getCharacterFromName(name) == null)
                     continue;
 
                 // if the NPC was divorced by the player, nothing occurs
-                if (Game1.player.friendshipData[name].IsDivorced())
+                if (curFriendship.IsDivorced())
                     continue;
 
                 //check if Player gave NPC a gift
-                if (Game1.player.friendshipData[name].GiftsToday == 1)
+                if (curFriendship.GiftsToday == 1)
                 {
                     if (!this.WitnessCount.ContainsKey(name))
                         this.WitnessCount.Add(name, new int[4]);
@@ -155,12 +157,12 @@ namespace SB_PotC
                         // if the gift made the reciever decrease their friendship, do nothing, else
                         foreach (string relation in this.CharacterRelationships[name].Keys.ToArray())
                         {
-                            if (string.IsNullOrEmpty(relation) || Game1.getCharacterFromName(relation) == null)
+                            if (string.IsNullOrEmpty(relation) || Game1.getCharacterFromName(relation) == null || !Game1.player.friendshipData.TryGetValue(relation, out Friendship relationFriendship))
                                 continue;
                             if (!this.WitnessCount.ContainsKey(relation))
                                 this.WitnessCount.Add(relation, new int[4]);
                             
-                            if (Game1.player.friendshipData[relation].IsDivorced())
+                            if (relationFriendship.IsDivorced())
                                 continue;
                             CheckRelationshipData(relation);
                             if (this.WitnessCount[relation][ModEntry.RelationsGifted] < this.CharacterRelationships[relation].Count)
@@ -181,9 +183,9 @@ namespace SB_PotC
                         List<Character> charactersWithinDistance = ModEntry.AreThereCharactersWithinDistance(Game1.player.getTileLocation(), 20, Game1.player.currentLocation);
                         foreach (Character characterWithinDistance in charactersWithinDistance)
                         {
-                            if (characterWithinDistance == null || characterWithinDistance.Name == name)
+                            if (characterWithinDistance == null || characterWithinDistance.Name == name || !Game1.player.friendshipData.TryGetValue(characterWithinDistance.Name, out Friendship friendshipWithinDistance))
                                 continue;
-                            if (Game1.player.friendshipData[characterWithinDistance.Name].IsDivorced())
+                            if (friendshipWithinDistance.IsDivorced())
                                 characterWithinDistance.doEmote(12);
                             else
                             {
@@ -261,15 +263,14 @@ namespace SB_PotC
                 if (Game1.currentLocation != null && Game1.currentLocation.currentEvent != null && Game1.player.currentLocation.currentEvent.isFestival)
                 {
                     Utility.improveFriendshipWithEveryoneInRegion(Game1.player, this.Config.UmojaBonusFestival, 2);
-                    foreach (string name in Game1.player.friendshipData.Keys.ToArray())
+                    foreach (KeyValuePair<string, Friendship> pair in Game1.player.friendshipData.Pairs)
                     {
+                        string name = pair.Key;
+                        Friendship friendship = pair.Value;
                         NPC character = Game1.getCharacterFromName(name);
                         if (character != null && character.currentLocation == Game1.currentLocation)
                         {
-                            if (Game1.player.friendshipData[name].IsDivorced())
-                                character.doEmote(12);
-                            else
-                                character.doEmote(32);
+                            character.doEmote(friendship.IsDivorced() ? 12 : 32);
                         }
                     }
                     this.Monitor.Log("The Villagers Are glad you came!", LogLevel.Info);
