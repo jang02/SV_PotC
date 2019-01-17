@@ -1,4 +1,4 @@
-﻿namespace SB_PotC
+﻿namespace PartOfTheCommunity
 {
     internal class ModConfig
     {

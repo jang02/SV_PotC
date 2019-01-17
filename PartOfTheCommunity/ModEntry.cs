@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework;
+using PartOfTheCommunity.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
@@ -10,7 +11,7 @@ using StardewValley.Events;
 using StardewValley.Locations;
 using StardewValley.Menus;
 
-namespace SB_PotC
+namespace PartOfTheCommunity
 {
     /// <summary>The mod entry point.</summary>
     public class ModEntry : Mod
@@ -18,20 +19,27 @@ namespace SB_PotC
         /*********
         ** Properties
         *********/
-        private readonly string[] StoreOwners = { "Pierre", "Gus", "Clint", "Marnie", "Robin", "Sandy", "Willy" };
+        /// <summary>The shopkeeper names indexed by their location name.</summary>
+        private readonly IDictionary<string, string> Shops = new Dictionary<string, string>
+        {
+            ["SeedShop"] = "Pierre",
+            ["AnimalShop"] = "Marnie",
+            ["Blacksmith"] = "Clint",
+            ["FishShop"] = "Willy",
+            ["ScienceHouse"] = "Robin",
+            ["Saloon"] = "Gus",
+            ["Mine"] = "Dwarf",
+            ["SandyHouse"] = "Sandy",
+            ["Sewer"] = "Krobus"
+        };
 
-        private const int HasTalked = 0;
-        private const int ReceivedGift = 1;
-        private const int RelationsGifted = 2;
-
-        private SerializableDictionary<string, SerializableDictionary<string, string>> CharacterRelationships;
-        private SerializableDictionary<string, int[]> WitnessCount;
-        private SerializableDictionary<string, bool> HasShoppedInStore;
+        /// <summary>Metadata for NPCs tracked by the mod.</summary>
+        private IDictionary<string, CharacterInfo> Characters;
         private bool HasEnteredEvent;
         private int CurrentNumberOfCompletedBundles;
         private uint CurrentNumberOfCompletedDailyQuests;
         private bool HasRecentlyCompletedQuest;
-        private int DaysAfterCompletingLastDailyQuest;
+        private int DaysAfterCompletingLastDailyQuest = -1;
         private int CurrentUniqueItemsShipped;
         private bool IsReady;
         private ModConfig Config;
@@ -44,23 +52,11 @@ namespace SB_PotC
         /// <param name="helper">Provides simplified APIs for writing mods.</param>
         public override void Entry(IModHelper helper)
         {
-
-            if (this.CharacterRelationships == null || this.WitnessCount == null)
-            {
-                if (this.CharacterRelationships == null)
-                    this.CharacterRelationships = new SerializableDictionary<string, SerializableDictionary<string, string>>();
-                if (this.WitnessCount == null)
-                    this.WitnessCount = new SerializableDictionary<string, int[]>();
-            }
             GameEvents.UpdateTick += this.ModUpdate;
-            SaveEvents.AfterLoad += this.SetVariables;
+            TimeEvents.AfterDayStarted += this.StartTracking;
             SaveEvents.AfterReturnToTitle += this.Reset;
             SaveEvents.BeforeSave += this.EndOfDayUpdate;
             SaveEvents.AfterSave += this.SaveConfigFile;
-            this.HasShoppedInStore = new SerializableDictionary<string, bool>();
-            this.HasRecentlyCompletedQuest = false;
-            this.DaysAfterCompletingLastDailyQuest = -1;
-            this.IsReady = false;
         }
 
 
@@ -72,45 +68,52 @@ namespace SB_PotC
             this.Helper.Data.WriteJsonFile($"{Constants.SaveFolderName}/config.json", this.Config);
         }
 
-        private void SetVariables(object sender, EventArgs e)
+        private void StartTracking(object sender, EventArgs e)
         {
-            this.Config = this.Helper.Data.ReadJsonFile<ModConfig>($"{Constants.SaveFolderName}/config.json") ?? new ModConfig();
-            foreach (string name in Game1.player.friendshipData.Keys)
-            {
-                this.CheckRelationshipData(name);
-                this.WitnessCount.Add(name, new int[4]);
-            }
+            // refresh data
+            this.Characters = this.GetCharacters();
             this.CurrentNumberOfCompletedBundles = ((CommunityCenter)Game1.getLocationFromName("CommunityCenter")).numberOfCompleteBundles();
-            if (!this.Config.HasGottenInitialUjimaBonus)
+            this.CurrentUniqueItemsShipped = Game1.player.basicShipped.Count;
+            this.CurrentNumberOfCompletedDailyQuests = Game1.stats.questsCompleted;
+            this.HasEnteredEvent = false;
+
+            // init on first load
+            if (!this.IsReady)
             {
-                foreach (string storeOwner in this.StoreOwners)
+                // init data
+                this.Config = this.Helper.Data.ReadJsonFile<ModConfig>($"{Constants.SaveFolderName}/config.json") ?? new ModConfig();
+                this.IsReady = true;
+
+                // add initial community center bonus
+                if (!this.Config.HasGottenInitialUjimaBonus)
                 {
-                    if (Game1.getCharacterFromName(storeOwner) == null) continue;
-                    Game1.player.changeFriendship((this.Config.UjimaBonus * this.CurrentNumberOfCompletedBundles), Game1.getCharacterFromName(storeOwner));
+                    int bonusPoints = this.Config.UjimaBonus * this.CurrentNumberOfCompletedBundles;
+                    foreach (CharacterInfo shopkeeper in this.Characters.Values.Where(p => p.IsShopOwner))
+                    {
+                        NPC npc = Game1.getCharacterFromName(shopkeeper.Name, true);
+                        if (npc != null)
+                            Game1.player.changeFriendship(bonusPoints, npc);
+                    }
+                    this.Monitor.Log($"Gained {bonusPoints} friendship from all store owners for completing {this.CurrentNumberOfCompletedBundles} {(this.CurrentNumberOfCompletedBundles > 1 ? "Bundles" : "Bundle")}", LogLevel.Info);
+                    this.Config.HasGottenInitialUjimaBonus = true;
                 }
 
-                this.Monitor.Log($"You have gained {20 * this.CurrentNumberOfCompletedBundles} friendship from all store owners for completing {this.CurrentNumberOfCompletedBundles} {(this.CurrentNumberOfCompletedBundles > 1 ? "Bundles" : "Bundle")}", LogLevel.Info);
-                this.Config.HasGottenInitialUjimaBonus = true;
+                // add initial items shipped bonus
+                if (!this.Config.HasGottenInitialKuumbaBonus)
+                {
+                    int bonusPoints = this.Config.KuumbaBonus * this.CurrentUniqueItemsShipped;
+                    Utility.improveFriendshipWithEveryoneInRegion(Game1.player, bonusPoints, 2);
+                    this.Monitor.Log($"Gained {bonusPoints} friendship for shipping {this.CurrentUniqueItemsShipped} unique {(this.CurrentUniqueItemsShipped != 1 ? "items" : "item")}", LogLevel.Info);
+                    this.Config.HasGottenInitialKuumbaBonus = true;
+                }
             }
-            this.CurrentUniqueItemsShipped = Game1.player.basicShipped.Count;
-            if (!this.Config.HasGottenInitialKuumbaBonus)
-            {
-                int friendshipPoints = this.Config.KuumbaBonus * this.CurrentUniqueItemsShipped;
-                Utility.improveFriendshipWithEveryoneInRegion(Game1.player, friendshipPoints, 2);
-                this.Monitor.Log($"Gained {friendshipPoints} friendship for shipping {this.CurrentUniqueItemsShipped} unique {(this.CurrentUniqueItemsShipped != 1 ? "items" : "item")}", LogLevel.Info);
-                this.Config.HasGottenInitialKuumbaBonus = true;
-            }
-            this.CurrentNumberOfCompletedDailyQuests = Game1.stats.questsCompleted;
-            this.IsReady = true;
         }
 
         private void Reset(object sender, EventArgs e)
         {
             this.IsReady = false;
             this.Config = null;
-            this.CharacterRelationships.Clear();
-            this.WitnessCount.Clear();
-            this.HasShoppedInStore.Clear();
+            this.Characters = this.GetCharacters();
             this.HasEnteredEvent = false;
             this.HasRecentlyCompletedQuest = false;
             this.CurrentNumberOfCompletedBundles = 0;
@@ -132,243 +135,188 @@ namespace SB_PotC
 
         private void ModUpdate(object sender, EventArgs e)
         {
-            if (!Game1.hasLoadedGame || SaveGame.IsProcessing || !this.IsReady)
+            if (!Context.IsWorldReady || !this.IsReady)
                 return;
 
             foreach (KeyValuePair<string, Friendship> pair in Game1.player.friendshipData.Pairs)
             {
-                string name = pair.Key;
-                Friendship curFriendship = pair.Value;
-                if (Game1.getCharacterFromName(name) == null)
+                // get friend info
+                if (!this.Characters.TryGetValue(pair.Key, out CharacterInfo friend))
+                    continue;
+                NPC friendNpc = Game1.getCharacterFromName(pair.Key, true);
+                if (friendNpc == null)
                     continue;
 
-                // if the NPC was divorced by the player, nothing occurs
-                if (curFriendship.IsDivorced())
+                // get friendship
+                Friendship friendship = pair.Value;
+                if (friendship.IsDivorced())
                     continue;
 
-                //check if Player gave NPC a gift
-                if (curFriendship.GiftsToday == 1)
-                {
-                    if (!this.WitnessCount.ContainsKey(name))
-                        this.WitnessCount.Add(name, new int[4]);
-                    if (this.WitnessCount[name][ModEntry.ReceivedGift] < 1)
-                    {
-                        this.CheckRelationshipData(name);
-                        // if the gift made the reciever decrease their friendship, do nothing, else
-                        foreach (string relation in this.CharacterRelationships[name].Keys.ToArray())
-                        {
-                            if (string.IsNullOrEmpty(relation) || Game1.getCharacterFromName(relation) == null || !Game1.player.friendshipData.TryGetValue(relation, out Friendship relationFriendship))
-                                continue;
-                            if (!this.WitnessCount.ContainsKey(relation))
-                                this.WitnessCount.Add(relation, new int[4]);
-                            
-                            if (relationFriendship.IsDivorced())
-                                continue;
-                            CheckRelationshipData(relation);
-                            if (this.WitnessCount[relation][ModEntry.RelationsGifted] < this.CharacterRelationships[relation].Count)
-                                this.WitnessCount[relation][ModEntry.RelationsGifted]++;
-                        }
-                        this.WitnessCount[name][ModEntry.ReceivedGift] = 1;
-                    }
-                }
+                // track gift
+                if (friendship.GiftsToday == 1)
+                    friend.ReceivedGift = true;
 
-                //check if player is talking to a NPC
-                if (Game1.player.hasTalkedToFriendToday(name))
+                // track talk & apply nearby NPC bonuses
+                if (Game1.player.hasTalkedToFriendToday(friend.Name))
                 {
-                    if (!this.WitnessCount.ContainsKey(name))
-                        this.WitnessCount.Add(name, new int[4]);
-                    if (this.WitnessCount[name][ModEntry.HasTalked] < 1)
+                    if (!friend.HasTalked)
                     {
-                        CheckRelationshipData(name);
-                        List<Character> charactersWithinDistance = ModEntry.AreThereCharactersWithinDistance(Game1.player.getTileLocation(), 20, Game1.player.currentLocation);
-                        foreach (Character characterWithinDistance in charactersWithinDistance)
+                        IList<Character> charactersWithinDistance = ModEntry.AreThereCharactersWithinDistance(Game1.player.getTileLocation(), 20, Game1.player.currentLocation);
+                        foreach (Character nearbyNpc in charactersWithinDistance)
                         {
-                            if (characterWithinDistance == null || characterWithinDistance.Name == name || !Game1.player.friendshipData.TryGetValue(characterWithinDistance.Name, out Friendship friendshipWithinDistance))
+                            // get nearby character's info
+                            if (nearbyNpc == null || nearbyNpc.Name == friend.Name)
                                 continue;
-                            if (friendshipWithinDistance.IsDivorced())
-                                characterWithinDistance.doEmote(12);
-                            else
+                            if (!this.Characters.TryGetValue(nearbyNpc.Name, out CharacterInfo nearbyCharacter))
+                                continue;
+                            if (!Game1.player.friendshipData.TryGetValue(nearbyNpc.Name, out Friendship nearbyFriendship))
+                                continue;
+
+                            // ignore if divorced
+                            if (nearbyFriendship.IsDivorced())
                             {
-                                if (!this.WitnessCount.ContainsKey(characterWithinDistance.Name))
-                                    this.WitnessCount.Add(characterWithinDistance.Name, new int[4]);
-                                this.WitnessCount[characterWithinDistance.Name][3]++;
-                                if (this.WitnessCount[characterWithinDistance.Name][3] != 0 && (this.WitnessCount[characterWithinDistance.Name][3] & (this.WitnessCount[characterWithinDistance.Name][3] - 1)) == 0)
-                                {
-                                    characterWithinDistance.doEmote(32);
-                                    Game1.player.changeFriendship(this.Config.WitnessBonus, (characterWithinDistance as NPC));
-                                    this.Monitor.Log($"{characterWithinDistance.Name} saw you taking to a {name}. +{this.Config.WitnessBonus} Friendship: {characterWithinDistance.Name}", LogLevel.Info);
-                                }
+                                nearbyNpc.doEmote(Character.angryEmote);
+                                continue;
                             }
+
+                            // add witness bonus
+                            nearbyCharacter.NearbyTalksSeen++;
+                            nearbyNpc.doEmote(32);
+                            Game1.player.changeFriendship(this.Config.WitnessBonus, (nearbyNpc as NPC));
+                            this.Monitor.Log($"{nearbyNpc.Name} saw you taking to {friend.Name}. +{this.Config.WitnessBonus} Friendship: {nearbyNpc.Name}", LogLevel.Info);
                         }
-                        this.WitnessCount[name][ModEntry.HasTalked] = 1;
+                        friend.HasTalked = true;
                     }
                 }
             }
 
-            //Check if the player is actively shopping
+            // check if shopping
             //TODO: Add the Bus/Pam
-            if (Game1.activeClickableMenu is ShopMenu shopMenu)
+            if (Game1.activeClickableMenu is ShopMenu shopMenu && this.Shops.TryGetValue(Game1.currentLocation.Name, out string shopOwnerName))
             {
-                Item heldItem = this.Helper.Reflection.GetField<Item>(shopMenu, "heldItem").GetValue();
-                if (heldItem != null)
+                // get shopkeeper
+                if (!this.Characters.TryGetValue(shopOwnerName, out CharacterInfo shopkeeper))
+                    return;
+
+                // mark shopped
+                if (!shopkeeper.HasShopped && this.Helper.Reflection.GetField<Item>(shopMenu, "heldItem").GetValue() != null)
                 {
-                    string shopOwner = "";
-                    switch (Game1.currentLocation.Name)
+                    shopkeeper.HasShopped = true;
+                    NPC shopkeeperNpc = Game1.getCharacterFromName(shopOwnerName);
+                    if (shopkeeperNpc != null)
                     {
-                        case "SeedShop":
-                            shopOwner = "Pierre";
-                            break;
-                        case "AnimalShop":
-                            shopOwner = "Marnie";
-                            break;
-                        case "Blacksmith":
-                            shopOwner = "Clint";
-                            break;
-                        case "FishShop":
-                            shopOwner = "Willy";
-                            break;
-                        case "ScienceHouse":
-                            shopOwner = "Robin";
-                            break;
-                        case "Saloon":
-                            shopOwner = "Gus";
-                            break;
-                        case "Mine":
-                            shopOwner = "Dwarf";
-                            break;
-                        case "SandyHouse":
-                            shopOwner = "Sandy";
-                            break;
-                        case "Sewer":
-                            shopOwner = "Krobus";
-                            break;
-                    }
-                    if (!string.IsNullOrEmpty(shopOwner))
-                    {
-                        if (!this.HasShoppedInStore.ContainsKey(shopOwner))
-                            this.HasShoppedInStore.Add(shopOwner, false);
-                        if (Game1.getCharacterFromName(shopOwner) != null && this.HasShoppedInStore[shopOwner] == false)
-                        {
-                            Game1.player.changeFriendship(this.Config.UjamaaBonus, Game1.getCharacterFromName(shopOwner));
-                            this.Monitor.Log($"{shopOwner}: Pleasure doing business with you!", LogLevel.Info);
-                            this.HasShoppedInStore[shopOwner] = true;
-                        }
+                        Game1.player.changeFriendship(this.Config.UjamaaBonus, shopkeeperNpc);
+                        this.Monitor.Log($"{shopOwnerName}: Pleasure doing business with you!", LogLevel.Info);
                     }
                 }
             }
 
-            // Check if the Player has entered a festival
-            if (this.HasEnteredEvent == false)
+            // check if player entered a festival
+            if (!this.HasEnteredEvent && Game1.currentLocation?.currentEvent?.isFestival == true)
             {
-                if (Game1.currentLocation != null && Game1.currentLocation.currentEvent != null && Game1.player.currentLocation.currentEvent.isFestival)
+                Utility.improveFriendshipWithEveryoneInRegion(Game1.player, this.Config.UmojaBonusFestival, 2);
+                foreach (KeyValuePair<string, Friendship> pair in Game1.player.friendshipData.Pairs)
                 {
-                    Utility.improveFriendshipWithEveryoneInRegion(Game1.player, this.Config.UmojaBonusFestival, 2);
-                    foreach (KeyValuePair<string, Friendship> pair in Game1.player.friendshipData.Pairs)
-                    {
-                        string name = pair.Key;
-                        Friendship friendship = pair.Value;
-                        NPC character = Game1.getCharacterFromName(name);
-                        if (character != null && character.currentLocation == Game1.currentLocation)
-                        {
-                            character.doEmote(friendship.IsDivorced() ? 12 : 32);
-                        }
-                    }
-                    this.Monitor.Log("The Villagers Are glad you came!", LogLevel.Info);
-                    this.HasEnteredEvent = true;
+                    string name = pair.Key;
+                    Friendship friendship = pair.Value;
+                    NPC character = Game1.getCharacterFromName(name);
+                    if (character != null && object.ReferenceEquals(character.currentLocation, Game1.currentLocation))
+                        character.doEmote(friendship.IsDivorced() ? 12 : 32);
                 }
+                this.Monitor.Log("The villagers are glad you came!", LogLevel.Info);
+                this.HasEnteredEvent = true;
             }
 
-            // Check if the Player is getting married or having a baby
-            if ((Game1.weddingToday || Game1.farmEvent is BirthingEvent) && this.HasEnteredEvent == false)
+            // check if player is getting married or having a baby
+            if ((Game1.weddingToday || Game1.farmEvent is BirthingEvent) && !this.HasEnteredEvent && this.Characters.TryGetValue(Game1.player.spouse, out CharacterInfo spouse))
             {
-                CheckRelationshipData(Game1.player.spouse);
-                SerializableDictionary<string, string> relationships = this.CharacterRelationships[Game1.player.spouse];
-                foreach (string relation in relationships.Keys.ToArray())
+                foreach (CharacterRelationship relation in spouse.Relationships)
                 {
-                    if (Game1.getCharacterFromName(relation) == null) continue;
-                    if (!relationships[relation].ToLower().Contains("friend"))
+                    NPC relationNpc = Game1.getCharacterFromName(relation.Character.Name);
+                    if (relationNpc == null)
+                        continue;
+
+                    if (relation.Relationship != "Friend")
                     {
-                        Game1.player.changeFriendship(this.Config.UmojaBonusMarry, Game1.getCharacterFromName(relation));
-                        this.Monitor.Log($"{relation}: Married into the Family, recieved +{this.Config.UmojaBonusMarry} friendship", LogLevel.Info);
+                        Game1.player.changeFriendship(this.Config.UmojaBonusMarry, relationNpc);
+                        this.Monitor.Log($"{relation}: Married into the family, received +{this.Config.UmojaBonusMarry} friendship", LogLevel.Info);
                     }
                     else
                     {
-                        Game1.player.changeFriendship(this.Config.UmojaBonusMarry / 2, Game1.getCharacterFromName(relation));
-                        this.Monitor.Log($"{relation}: Married a friend, recieved +{this.Config.UmojaBonusMarry / 2} friendship", LogLevel.Info);
+                        Game1.player.changeFriendship(this.Config.UmojaBonusMarry / 2, relationNpc);
+                        this.Monitor.Log($"{relation}: Married a friend, received +{this.Config.UmojaBonusMarry / 2} friendship", LogLevel.Info);
                     }
                 }
                 this.HasEnteredEvent = true;
             }
 
-            //Check if the Player recently completed a daily quest
+            // check if player completed daily quest
             if (Game1.stats.questsCompleted > this.CurrentNumberOfCompletedDailyQuests)
             {
-                this.DaysAfterCompletingLastDailyQuest = 0;
                 this.CurrentNumberOfCompletedDailyQuests = Game1.stats.questsCompleted;
+                this.DaysAfterCompletingLastDailyQuest = 0;
                 this.HasRecentlyCompletedQuest = true;
             }
         }
 
         private void EndOfDayUpdate(object sender, EventArgs e)
         {
-            //Gifting, Talking
-            foreach (string name in this.WitnessCount.Keys.ToArray())
+            // bonus for giving gifts to an NPC's friend/relative
+            foreach (CharacterInfo character in this.Characters.Values)
             {
-                if (Game1.getCharacterFromName(name) == null)
+                NPC npc = Game1.getCharacterFromName(character.Name);
+                if (npc == null)
                     continue;
-                if (this.WitnessCount[name][1] > 0)
-                {
-                    foreach (string relation in this.CharacterRelationships[name].Keys.ToArray())
-                    {
-                        if (string.IsNullOrEmpty(relation) || Game1.getCharacterFromName(relation) == null)
-                            continue;
-                        if (this.WitnessCount[relation][2] > 0)
-                        {
-                            Game1.player.changeFriendship(this.Config.StorytellerBonus * this.WitnessCount[relation][2], Game1.getCharacterFromName(relation));
-                            Monitor.Log($"{relation}: Friendship raised {this.Config.StorytellerBonus * this.WitnessCount[relation][2]} for Gifting to someone {relation} loves:", LogLevel.Info);
-                            this.WitnessCount[relation][2] = 0;
-                        }
-                    }
-                    this.WitnessCount[name][1] = 0;
-                    this.WitnessCount[name][3] = 0;
-				}
-				if (((Game1.player.isMarried() && Game1.player.spouse == name) || (Game1.getCharacterFromName(name) is Child child && child.idOfParent == Game1.player.UniqueMultiplayerID)) && this.WitnessCount[name][0] == 1)
-                {
-                    foreach (string relation in this.CharacterRelationships[name].Keys.ToArray())
-                    {
-                        if (string.IsNullOrEmpty(relation) || Game1.getCharacterFromName(relation) == null)
-                            continue;
-                        if (this.CharacterRelationships[name][relation] != "Friend" && this.CharacterRelationships[name][relation] != "Wartorn")
-                        {
-                            Game1.player.changeFriendship(this.Config.UmojaBonus, Game1.getCharacterFromName(relation));
-                            Monitor.Log($"{relation}: Friendship raised {this.Config.UmojaBonus} for loving your family:", LogLevel.Info);
 
-                        }
-                    }
+                // gifted relations bonus
+                int relationsGifted = character.Relationships.Count(p => p.Character.ReceivedGift);
+                if (relationsGifted > 0)
+                {
+                    Game1.player.changeFriendship(this.Config.StorytellerBonus * relationsGifted, npc);
+                    this.Monitor.Log($"{character.Name}: Friendship raised {this.Config.StorytellerBonus * relationsGifted} for gifting to someone they love.", LogLevel.Info);
                 }
-                this.WitnessCount[name][0] = 0;
             }
 
-            //Check if New Bundles were completed today
-            CommunityCenter communityCenter = (CommunityCenter)Game1.getLocationFromName("CommunityCenter");
-            if (this.CurrentNumberOfCompletedBundles < communityCenter.numberOfCompleteBundles())
+            // extended family bonus for gifting spouse/child
+            if (!string.IsNullOrWhiteSpace(Game1.player.spouse) && this.Characters.TryGetValue(Game1.player.Name, out CharacterInfo player) && this.Characters.TryGetValue(Game1.player.spouse, out CharacterInfo spouse))
             {
-                int newNumberOfCompletedBundles = communityCenter.numberOfCompleteBundles();
-                foreach (string storeOwner in this.StoreOwners)
+                bool giftedFamily = player.Relationships.Any(p => p.Character.ReceivedGift && p.Relationship != "Friend" && p.Relationship != "Wartorn");
+                if (giftedFamily)
                 {
-                    if (Game1.getCharacterFromName(storeOwner) != null)
-                        Game1.player.changeFriendship(this.Config.UjimaBonus * newNumberOfCompletedBundles, Game1.getCharacterFromName(storeOwner));
+                    foreach (CharacterRelationship relation in spouse.Relationships)
+                    {
+                        NPC relationNpc = Game1.getCharacterFromName(relation.Character.Name);
+                        if (relationNpc != null && relation.Relationship != "Friend" && relation.Relationship != "Wartorn")
+                        {
+                            Game1.player.changeFriendship(this.Config.UmojaBonus, relationNpc);
+                            this.Monitor.Log($"{relation}: Friendship raised {this.Config.UmojaBonus} for loving your family.", LogLevel.Info);
+                        }
+                    }
                 }
-                this.Monitor.Log($"You have gained {20 * (newNumberOfCompletedBundles - this.CurrentNumberOfCompletedBundles)} friendship from all store owners for completing {newNumberOfCompletedBundles - this.CurrentNumberOfCompletedBundles} Bundle today", LogLevel.Info);
-                this.CurrentNumberOfCompletedBundles = newNumberOfCompletedBundles;
             }
 
-            //Update the Daily Quest Counters
+            // bonus for new completed bundles
+            CommunityCenter communityCenter = (CommunityCenter)Game1.getLocationFromName("CommunityCenter");
+            int totalBundles = communityCenter.numberOfCompleteBundles();
+            if (this.CurrentNumberOfCompletedBundles < totalBundles)
+            {
+                int newBundles = totalBundles - this.CurrentNumberOfCompletedBundles;
+                int bonusPoints = this.Config.UjimaBonus * newBundles;
+                foreach (CharacterInfo shopkeeper in this.Characters.Values.Where(p => p.IsShopOwner))
+                {
+                    NPC shopkeeperNpc = Game1.getCharacterFromName(shopkeeper.Name);
+                    if (shopkeeperNpc != null)
+                        Game1.player.changeFriendship(bonusPoints, shopkeeperNpc);
+                }
+                this.Monitor.Log($"Gained {bonusPoints} friendship with all store owners for completing {newBundles} bundles today.", LogLevel.Info);
+            }
+
+            // bonus for completed daily quests
             if (this.DaysAfterCompletingLastDailyQuest < 3 && this.HasRecentlyCompletedQuest)
             {
-                int friendshipPoints = this.Config.UjimaBonus / (int)Math.Pow(2, this.DaysAfterCompletingLastDailyQuest);
-                Utility.improveFriendshipWithEveryoneInRegion(Game1.player, friendshipPoints, 2);
-                this.Monitor.Log($"Gained {friendshipPoints} friendship for recent daily quest completion", LogLevel.Info);
+                int bonusPoints = this.Config.UjimaBonus / (int)Math.Pow(2, this.DaysAfterCompletingLastDailyQuest);
+                Utility.improveFriendshipWithEveryoneInRegion(Game1.player, bonusPoints, 2);
+                this.Monitor.Log($"Gained {bonusPoints} friendship with everyone for completing a daily quest.", LogLevel.Info);
             }
             else
             {
@@ -378,232 +326,250 @@ namespace SB_PotC
             if (!Utility.isFestivalDay(Game1.dayOfMonth + 1, Game1.currentSeason))
                 this.DaysAfterCompletingLastDailyQuest++;
 
-            //Check if any new items were shipped
+            // bonus for new shipped items
             if (Game1.player.basicShipped.Count > this.CurrentUniqueItemsShipped)
             {
-                int friendshipPoints = this.Config.KuumbaBonus * (Game1.player.basicShipped.Count - this.CurrentUniqueItemsShipped);
-                Utility.improveFriendshipWithEveryoneInRegion(Game1.player, friendshipPoints, 2);
-                this.Monitor.Log($"Gained {friendshipPoints} friendship for shipping items", LogLevel.Info);
-                this.CurrentUniqueItemsShipped = Game1.player.basicShipped.Count;
+                int bonusPoints = this.Config.KuumbaBonus * (Game1.player.basicShipped.Count - this.CurrentUniqueItemsShipped);
+                Utility.improveFriendshipWithEveryoneInRegion(Game1.player, bonusPoints, 2);
+                this.Monitor.Log($"Gained {bonusPoints} friendship with everyone for shipping new items.", LogLevel.Info);
             }
-
-            //Resetting Miscellaneous Flags
-            foreach (string name in this.HasShoppedInStore.Keys.ToArray())
-                this.HasShoppedInStore[name] = false;
-            if (this.HasEnteredEvent) this.HasEnteredEvent = false;
         }
 
-        private void CheckRelationshipData(string name)
+        /// <summary>Get all available characters.</summary>
+        private IDictionary<string, CharacterInfo> GetCharacters()
         {
-            if (!this.CharacterRelationships.ContainsKey(name))
+            // get predefined characters
+            IEnumerable<CharacterInfo> GetPredefinedCharacters()
             {
-                this.CharacterRelationships.Add(name, new SerializableDictionary<string, string>());
-                this.Monitor.Log($"New Entry: {name}", LogLevel.Info);
-                switch (name)
-                {
-                    case "Vincent":
-                    case "Sam":
-                        this.CharacterRelationships[name].Add("Jodi", "Mother");
-                        this.CharacterRelationships[name].Add("Kent", "Father");
-                        this.CharacterRelationships[name].Add(name == "Vincent" ? "Sam" : "Vincent", "Brother");
-                        if (name.Equals("Vincent"))
-                            this.CharacterRelationships[name].Add("Jas", "Friend");
-                        else
-                        {
-                            this.CharacterRelationships[name].Add("Abigail", "Friend");
-                            this.CharacterRelationships[name].Add("Sebastian", "Friend");
-                            this.CharacterRelationships[name].Add("Penny", "Friend");
-                        }
-                        return;
-                    case "Maru":
-                    case "Sebastian":
-                        this.CharacterRelationships[name].Add("Robin", "Mother");
-                        this.CharacterRelationships[name].Add("Demetrius", name == "Maru" ? "Father" : "Step-Father");
-                        this.CharacterRelationships[name].Add(name == "Maru" ? "Sebastian" : "Maru", "Half-" + name == "Maru" ? "Brother" : "Sister");
-                        if (name.Equals("Sebastian"))
-                        {
-                            this.CharacterRelationships[name].Add("Abigail", "Friend");
-                            this.CharacterRelationships[name].Add("Sam", "Friend");
-                        }
-                        else
-                            this.CharacterRelationships[name].Add("Penny", "Friend");
-                        return;
-                    case "Dwarf":
-                    case "Krobus":
-                        this.CharacterRelationships[name].Add(name == "Dwarf" ? "Krobus" : "Dwarf", "Wartorn");
-                        return;
-                    case "Jodi":
-                    case "Kent":
-                        this.CharacterRelationships[name].Add(name == "Jodi" ? "Kent" : "Jodi", name == "Jodi" ? "Husband" : "Wife");
-                        this.CharacterRelationships[name].Add("Sam", "Son");
-                        this.CharacterRelationships[name].Add("Vincent", "Son");
-                        this.CharacterRelationships[name].Add("Caroline", "Friend");
-                        return;
-                    case "Emily":
-                        this.CharacterRelationships[name].Add("Haley", "Sister");
-                        this.CharacterRelationships[name].Add("Sandy", "Friend");
-                        this.CharacterRelationships[name].Add("Gus", "Friend");
-                        this.CharacterRelationships[name].Add("Clint", "Friend");
-                        this.CharacterRelationships[name].Add("Shane", "Friend");
-                        return;
-                    case "Abigail":
-                        this.CharacterRelationships[name].Add("Pierre", "Father");
-                        this.CharacterRelationships[name].Add("Caroline", "Mother");
-                        this.CharacterRelationships[name].Add("Sebastian", "Friend");
-                        this.CharacterRelationships[name].Add("Sam", "Friend");
-                        return;
-                    case "Caroline":
-                        this.CharacterRelationships[name].Add("Pierre", "Husband");
-                        this.CharacterRelationships[name].Add("Abigail", "Daughter");
-                        this.CharacterRelationships[name].Add("Jodi", "Friend");
-                        this.CharacterRelationships[name].Add("Kent", "Friend");
-                        return;
-                    case "Alex":
-                        this.CharacterRelationships[name].Add("George", "Grandfather");
-                        this.CharacterRelationships[name].Add("Evelyn", "Grandmother");
-                        this.CharacterRelationships[name].Add("Haley", "Friend");
-                        return;
-                    case "Demetrius":
-                        this.CharacterRelationships[name].Add("Robin", "Wife");
-                        this.CharacterRelationships[name].Add("Maru", "Daughter");
-                        this.CharacterRelationships[name].Add("Sebastian", "Step-Son");
-                        return;
-                    case "Jas":
-                        this.CharacterRelationships[name].Add("Marnie", "Aunt");
-                        this.CharacterRelationships[name].Add("Shane", "Godfather");
-                        this.CharacterRelationships[name].Add("Vincent", "Friend");
-                        return;
-                    case "Marnie":
-                        this.CharacterRelationships[name].Add("Shane", "Nephew");
-                        this.CharacterRelationships[name].Add("Jas", "Neice");
-                        this.CharacterRelationships[name].Add("Lewis", "Frind");
-                        return;
-                    case "Penny":
-                        this.CharacterRelationships[name].Add("Pam", "Mother");
-                        this.CharacterRelationships[name].Add("Sam", "Friend");
-                        this.CharacterRelationships[name].Add("Maru", "Friend");
-                        return;
-                    case "Robin":
-                        this.CharacterRelationships[name].Add("Demetrius", "Husband");
-                        this.CharacterRelationships[name].Add("Maru", "Daughter");
-                        this.CharacterRelationships[name].Add("Sebastian", "Son");
-                        return;
-                    case "Shane":
-                        this.CharacterRelationships[name].Add("Marnie", "Aunt");
-                        this.CharacterRelationships[name].Add("Jas", "Goddaughter");
-                        this.CharacterRelationships[name].Add("Emily", "Friend");
-                        return;
-                    case "Elliott":
-                        this.CharacterRelationships[name].Add("Willy", "Friend");
-                        this.CharacterRelationships[name].Add("Leah", "Friend");
-                        return;
-                    case "Evelyn":
-                        this.CharacterRelationships[name].Add("George", "Husband");
-                        this.CharacterRelationships[name].Add("Alex", "Son");
-                        return;
-                    case "George":
-                        this.CharacterRelationships[name].Add("Evelyn", "Husband");
-                        this.CharacterRelationships[name].Add("Alex", "Son");
-                        return;
-                    case "Gus":
-                        this.CharacterRelationships[name].Add("Pam", "Friend");
-                        this.CharacterRelationships[name].Add("Emily", "Friend");
-                        return;
-                    case "Haley":
-                        this.CharacterRelationships[name].Add("Emily", "Sister");
-                        this.CharacterRelationships[name].Add("Alex", "Friend");
-                        return;
-                    case "Pam":
-                        this.CharacterRelationships[name].Add("Penny", "Daughter");
-                        this.CharacterRelationships[name].Add("Gus", "Friend");
-                        return;
-                    case "Pierre":
-                        this.CharacterRelationships[name].Add("Caroline", "Wife");
-                        this.CharacterRelationships[name].Add("Abigail", "Daughter");
-                        return;
-                    case "Clint":
-                        this.CharacterRelationships[name].Add("Emily", "Admire");
-                        return;
-                    case "Leah":
-                        this.CharacterRelationships[name].Add("Elliott", "Friend");
-                        return;
-                    case "Lewis":
-                        this.CharacterRelationships[name].Add("Marnie", "Frind");
-                        return;
-                    case "Sandy":
-                        this.CharacterRelationships[name].Add("Emily", "Friend");
-                        return;
-                    case "Willy":
-                        this.CharacterRelationships[name].Add("Elliott", "Friend");
-                        return;
-                }
+                // create NPCs
+                var abigail = new CharacterInfo("Abigail", isMale: false);
+                var alex = new CharacterInfo("Alex", isMale: true);
+                var caroline = new CharacterInfo("Caroline", isMale: false);
+                var clint = new CharacterInfo("Clint", isMale: true);
+                var demetrius = new CharacterInfo("Demetrius", isMale: true);
+                var dwarf = new CharacterInfo("Dwarf", isMale: true);
+                var elliott = new CharacterInfo("Elliott", isMale: true);
+                var emily = new CharacterInfo("Emily", isMale: false);
+                var evelyn = new CharacterInfo("Evelyn", isMale: false);
+                var george = new CharacterInfo("George", isMale: true);
+                var gus = new CharacterInfo("Gus", isMale: true);
+                var jas = new CharacterInfo("Jas", isMale: false);
+                var jodi = new CharacterInfo("Jodi", isMale: false);
+                var haley = new CharacterInfo("Haley", isMale: false);
+                var kent = new CharacterInfo("Kent", isMale: true);
+                var krobus = new CharacterInfo("Krobus", isMale: true);
+                var leah = new CharacterInfo("Leah", isMale: false);
+                var maru = new CharacterInfo("Maru", isMale: false);
+                var marnie = new CharacterInfo("Marnie", isMale: false);
+                var lewis = new CharacterInfo("Lewis", isMale: true);
+                var pam = new CharacterInfo("Pam", isMale: false);
+                var penny = new CharacterInfo("Penny", isMale: false);
+                var pierre = new CharacterInfo("Pierre", isMale: true);
+                var robin = new CharacterInfo("Robin", isMale: false);
+                var sam = new CharacterInfo("Sam", isMale: true);
+                var sandy = new CharacterInfo("Sandy", isMale: false);
+                var sebastian = new CharacterInfo("Sebastian", isMale: true);
+                var shane = new CharacterInfo("Shane", isMale: true);
+                var vincent = new CharacterInfo("Vincent", isMale: true);
+                var willy = new CharacterInfo("Willy", isMale: true);
 
-                //Check for Relationships of your children
-				if (Game1.getCharacterFromName(name) is Child child && child.idOfParent == Game1.player.UniqueMultiplayerID)
-                {
-                    CheckRelationshipData(Game1.player.spouse);
-                    this.CharacterRelationships[name].Add(Game1.player.spouse, Utility.isMale(Game1.player.spouse) ? "Father" : "Mother");
-                    this.CharacterRelationships[Game1.player.spouse].Add(name, Utility.isMale(name) ? "Son" : "Daughter");
-                    foreach (string relation in this.CharacterRelationships[Game1.player.spouse].Keys.ToArray())
-                    {
-                        if (relation == name)
-                            continue;
-                        this.CheckRelationshipData(relation);
-                        switch (this.CharacterRelationships[Game1.player.spouse][relation])
-                        {
-                            case "Grandfather":
-                                this.CharacterRelationships[name].Add(relation, "Great-Grandfather");
-                                this.CharacterRelationships[relation].Add(name, Utility.isMale(name) ? "Great-Grandson" : "Great-Granddaughter");
-                                break;
-                            case "Grandmother":
-                                this.CharacterRelationships[name].Add(relation, "Great-Grandmother");
-                                this.CharacterRelationships[relation].Add(name, Utility.isMale(name) ? "Great-Grandson" : "Great-Granddaughter");
-                                break;
-                            case "Father":
-                            case "Step-Father":
-                                this.CharacterRelationships[name].Add(relation, "Grandfather");
-                                this.CharacterRelationships[relation].Add(name, Utility.isMale(name) ? "Grandson" : "Granddaughter");
-                                break;
-                            case "Mother":
-                                this.CharacterRelationships[name].Add(relation, "Grandmother");
-                                this.CharacterRelationships[relation].Add(name, Utility.isMale(name) ? "Grandson" : "Granddaughter");
-                                break;
-                            case "Brother":
-                            case "Step-Brother":
-                            case "Half-Brother":
-                                this.CharacterRelationships[name].Add(relation, "Uncle");
-                                this.CharacterRelationships[relation].Add(name, Utility.isMale(name) ? "Nephew" : "Niece");
-                                break;
-                            case "Sister":
-                            case "Step-Sister":
-                            case "Half-Sister":
-                                this.CharacterRelationships[name].Add(relation, "Aunt");
-                                this.CharacterRelationships[relation].Add(name, Utility.isMale(name) ? "Nephew" : "Niece");
-                                break;
-                            case "Niece":
-                            case "Nephew":
-                                this.CharacterRelationships[name].Add(relation, "Cousin");
-                                this.CharacterRelationships[relation].Add(name, "Cousin");
-                                break;
-                            case "Son":
-                            case "Daughter":
-                                this.CharacterRelationships[name].Add(relation, Utility.isMale(relation) ? "Brother" : "Sister");
-                                this.CharacterRelationships[relation].Add(name, Utility.isMale(name) ? "Brother" : "Sister");
-                                break;
-                        }
-                    }
+                // Caroline's family
+                this.AddRelationship(caroline, "Mother", abigail, "Daughter");
+                this.AddRelationship(caroline, "Wife", pierre, "Husband");
+                this.AddRelationship(pierre, "Father", abigail, "Daughter");
 
-                    // Check for the other children. They might be from another marriage
-                    foreach (Child getChildren in Game1.player.getChildren())
-                    {
-                        if (getChildren.Name != name && !this.CharacterRelationships[name].ContainsKey(getChildren.Name))
-                        {
-                            this.CharacterRelationships[name].Add(getChildren.Name, "Half-" + (Utility.isMale(getChildren.Name) ? "Brother" : "Sister"));
-                            this.CharacterRelationships[getChildren.Name].Add(name, "Half-" + (Utility.isMale(getChildren.Name) ? "Brother" : "Sister"));
-                        }
-                    }
+                // Emily's family
+                this.AddRelationship(haley, "Sister", emily, "Sister");
+
+                // Evelyn's family
+                this.AddRelationship(evelyn, "Grandmother", alex, "Grandson");
+                this.AddRelationship(evelyn, "Wife", george, "Husband");
+                this.AddRelationship(george, "Grandfather", alex, "Grandson");
+
+                // Jodi's family
+                this.AddRelationship(jodi, "Mother", sam, "Son");
+                this.AddRelationship(jodi, "Mother", vincent, "Son");
+                this.AddRelationship(jodi, "Wife", kent, "Husband");
+                this.AddRelationship(kent, "Father", sam, "Son");
+                this.AddRelationship(kent, "Father", vincent, "Son");
+                this.AddRelationship(sam, "Brother", vincent, "Brother");
+
+                // Marnie's family
+                this.AddRelationship(marnie, "Aunt", jas, "Niece");
+                this.AddRelationship(marnie, "Aunt", shane, "Nephew");
+                this.AddRelationship(jas, "Goddaughter", shane, "Godfather");
+
+                // Pam's family
+                this.AddRelationship(pam, "Mother", penny, "Daughter");
+
+                // Robin's family
+                this.AddRelationship(robin, "Mother", maru, "Daughter");
+                this.AddRelationship(robin, "Mother", sebastian, "Son");
+                this.AddRelationship(robin, "Wife", demetrius, "Husband");
+                this.AddRelationship(demetrius, "Father", maru, "Daughter");
+                this.AddRelationship(demetrius, "Step-Father", sebastian, "Step-Son");
+                this.AddRelationship(maru, "Half-Sister", sebastian, "Half-Brother");
+
+                // friends
+                this.AddFriend(abigail, sam);
+                this.AddFriend(abigail, sebastian);
+                this.AddFriend(caroline, kent);
+                this.AddFriend(elliott, willy);
+                this.AddFriend(emily, clint);
+                this.AddFriend(emily, gus);
+                this.AddFriend(emily, sandy);
+                this.AddFriend(emily, shane);
+                this.AddFriend(haley, alex);
+                this.AddFriend(jas, vincent);
+                this.AddFriend(jodi, caroline);
+                this.AddFriend(leah, elliott);
+                this.AddFriend(marnie, lewis);
+                this.AddFriend(pam, gus);
+                this.AddFriend(penny, maru);
+                this.AddFriend(penny, sam);
+                this.AddFriend(sam, sebastian);
+
+                // other
+                this.AddRelationship(dwarf, "Wartorn", krobus, "Wartorn");
+
+                return new[]
+                {
+                    abigail,
+                    alex,
+                    caroline,
+                    clint,
+                    demetrius,
+                    dwarf,
+                    elliott,
+                    emily,
+                    evelyn,
+                    george,
+                    gus,
+                    jas,
+                    jodi,
+                    haley,
+                    kent,
+                    krobus,
+                    leah,
+                    maru,
+                    marnie,
+                    lewis,
+                    pam,
+                    penny,
+                    pierre,
+                    robin,
+                    sam,
+                    sandy,
+                    sebastian,
+                    shane,
+                    vincent,
+                    willy
+                };
+            }
+            IDictionary<string, CharacterInfo> characters = GetPredefinedCharacters().ToDictionary(p => p.Name);
+
+            // mark shopkeepers
+            {
+                HashSet<string> shopkeeperNames = new HashSet<string>(this.Shops.Values);
+                foreach (CharacterInfo character in characters.Values)
+                    character.IsShopOwner = shopkeeperNames.Contains(character.Name);
+            }
+
+            // add player
+            var player = new CharacterInfo(Game1.player.Name, isMale: Game1.player.IsMale);
+            characters[player.Name] = player;
+
+            // add player spouse
+            CharacterInfo spouse = null;
+            if (Game1.player.spouse != null)
+            {
+                if (!characters.TryGetValue(Game1.player.spouse, out spouse))
+                {
+                    spouse = new CharacterInfo(Game1.player.spouse, isMale: Utility.isMale(Game1.player.spouse));
+                    characters[spouse.Name] = spouse;
                 }
             }
+
+            // add unknown NPCs
+            List<NPC> allCharacters = new List<NPC>();
+            Utility.getAllCharacters(allCharacters);
+            foreach (NPC npc in allCharacters)
+            {
+                if (npc.isVillager() && !characters.ContainsKey(npc.Name))
+                    characters[npc.Name] = new CharacterInfo(npc.Name, npc.Gender == NPC.male);
+            }
+
+            // add children
+            foreach (Child childNpc in Game1.player.getChildren())
+            {
+                // add child
+                CharacterInfo child = new CharacterInfo(childNpc.Name, isMale: childNpc.Gender == NPC.male);
+                characters[child.Name] = child;
+
+                // add relationships
+                this.AddRelationship(player, player.IsMale ? "Father" : "Mother", child, child.IsMale ? "Son" : "Daughter");
+                if (spouse != null)
+                {
+                    foreach (CharacterRelationship parentRelation in spouse.Relationships)
+                    {
+                        switch (parentRelation.Relationship)
+                        {
+                            case "Grandfather":
+                            case "Grandmother":
+                                this.AddRelationship(child, $"Great-Grand{(child.IsMale ? "son" : "daughter")}", parentRelation.Character, $"Great-{parentRelation.Relationship}");
+                                break;
+
+                            case "Father":
+                            case "Mother":
+                            case "Step-Father":
+                            case "Step-Mother":
+                                this.AddRelationship(child, $"Grand{(child.IsMale ? "son" : "daughter")}", parentRelation.Character, $"Grand{(parentRelation.Character.IsMale ? "father" : "mother")}");
+                                break;
+
+                            case "Brother":
+                            case "Sister":
+                            case "Half-Brother":
+                            case "Half-Sister":
+                            case "Step-Brother":
+                            case "Step-Sister":
+                                this.AddRelationship(child, child.IsMale ? "Nephew" : "Niece", parentRelation.Character, parentRelation.Character.IsMale ? "Uncle" : "Aunt");
+                                break;
+
+                            case "Niece":
+                            case "Nephew":
+                                this.AddRelationship(child, "Cousin", parentRelation.Character, "Cousin");
+                                break;
+
+                            case "Son":
+                            case "Daughter":
+                                this.AddRelationship(child, child.IsMale ? "Brother" : "Sister", parentRelation.Character, parentRelation.Character.IsMale ? "Brother" : "Sister");
+                                break;
+                        }
+                    }
+                    this.AddRelationship(spouse, spouse.IsMale ? "Father" : "Mother", child, child.IsMale ? "Son" : "Daughter");
+                }
+            }
+
+            return characters;
+        }
+
+        /// <summary>Add a relationship between two NPCs.</summary>
+        /// <param name="left">The left NPC.</param>
+        /// <param name="leftType">The left relationship type (i.e. <paramref name="left"/> is the _____ of <paramref name="right"/>).</param>
+        /// <param name="right">The right NPC.</param>
+        /// <param name="rightType">The right relationship type (i.e. <paramref name="right"/> is the _____ of <paramref name="left"/>).</param>
+        private void AddRelationship(CharacterInfo left, string leftType, CharacterInfo right, string rightType)
+        {
+            left.AddRelationship(rightType, right);
+            right.AddRelationship(leftType, left);
+        }
+
+        /// <summary>Add a friend relationship between two NPCs.</summary>
+        /// <param name="left">The left NPC.</param>
+        /// <param name="right">The right NPC.</param>
+        private void AddFriend(CharacterInfo left, CharacterInfo right)
+        {
+            this.AddRelationship(left, "Friend", right, "Friend");
         }
     }
 }
