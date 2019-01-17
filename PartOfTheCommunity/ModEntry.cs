@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using PartOfTheCommunity.Framework;
@@ -43,6 +44,7 @@ namespace PartOfTheCommunity
         private int CurrentUniqueItemsShipped;
         private bool IsReady;
         private ModConfig Config;
+        private PlayerData PlayerData;
 
 
         /*********
@@ -52,6 +54,8 @@ namespace PartOfTheCommunity
         /// <param name="helper">Provides simplified APIs for writing mods.</param>
         public override void Entry(IModHelper helper)
         {
+            this.Config = helper.ReadConfig<ModConfig>();
+
             helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
             helper.Events.GameLoop.DayStarted += this.OnDayStarted;
             helper.Events.GameLoop.ReturnedToTitle += this.OnReturnedToTitle;
@@ -68,7 +72,10 @@ namespace PartOfTheCommunity
         /// <param name="e">The event data.</param>
         private void OnSaved(object sender, SavedEventArgs e)
         {
-            this.Helper.Data.WriteJsonFile($"{Constants.SaveFolderName}/config.json", this.Config);
+            // remove legacy file (moved into save file at this point)
+            DirectoryInfo legacyDir = new DirectoryInfo(Path.Combine(this.Helper.DirectoryPath, $"{Constants.SaveFolderName}"));
+            if (legacyDir.Exists)
+                legacyDir.Delete(recursive: true);
         }
 
         /// <summary>Raised after the game begins a new day (including when the player loads a save).</summary>
@@ -84,14 +91,20 @@ namespace PartOfTheCommunity
             this.HasEnteredEvent = false;
 
             // init on first load
-            if (!this.IsReady)
+            if (!Context.IsMainPlayer)
+                this.IsReady = true;
+            else if (!this.IsReady)
             {
                 // init data
-                this.Config = this.Helper.Data.ReadJsonFile<ModConfig>($"{Constants.SaveFolderName}/config.json") ?? new ModConfig();
+                this.PlayerData =
+                    this.Helper.Data.ReadSaveData<PlayerData>("data")
+                    ?? this.Helper.Data.ReadJsonFile<PlayerData>($"{Constants.SaveFolderName}/config.json") // legacy file
+                    ?? new PlayerData();
+
                 this.IsReady = true;
 
                 // add initial community center bonus
-                if (!this.Config.HasGottenInitialUjimaBonus)
+                if (!this.PlayerData.HasGottenInitialUjimaBonus)
                 {
                     int bonusPoints = this.Config.UjimaBonus * this.CurrentNumberOfCompletedBundles;
                     foreach (CharacterInfo shopkeeper in this.Characters.Values.Where(p => p.IsShopOwner))
@@ -100,16 +113,16 @@ namespace PartOfTheCommunity
                             Game1.player.changeFriendship(bonusPoints, npc);
                     }
                     this.Monitor.Log($"Gained {bonusPoints} friendship from all store owners for completing {this.CurrentNumberOfCompletedBundles} {(this.CurrentNumberOfCompletedBundles > 1 ? "Bundles" : "Bundle")}", LogLevel.Info);
-                    this.Config.HasGottenInitialUjimaBonus = true;
+                    this.PlayerData.HasGottenInitialUjimaBonus = true;
                 }
 
                 // add initial items shipped bonus
-                if (!this.Config.HasGottenInitialKuumbaBonus)
+                if (!this.PlayerData.HasGottenInitialKuumbaBonus)
                 {
                     int bonusPoints = this.Config.KuumbaBonus * this.CurrentUniqueItemsShipped;
                     Utility.improveFriendshipWithEveryoneInRegion(Game1.player, bonusPoints, 2);
                     this.Monitor.Log($"Gained {bonusPoints} friendship for shipping {this.CurrentUniqueItemsShipped} unique {(this.CurrentUniqueItemsShipped != 1 ? "items" : "item")}", LogLevel.Info);
-                    this.Config.HasGottenInitialKuumbaBonus = true;
+                    this.PlayerData.HasGottenInitialKuumbaBonus = true;
                 }
             }
         }
@@ -120,7 +133,7 @@ namespace PartOfTheCommunity
         private void OnReturnedToTitle(object sender, ReturnedToTitleEventArgs e)
         {
             this.IsReady = false;
-            this.Config = null;
+            this.PlayerData = null;
             this.Characters = this.GetCharacters();
             this.HasEnteredEvent = false;
             this.HasRecentlyCompletedQuest = false;
@@ -338,6 +351,10 @@ namespace PartOfTheCommunity
                 Utility.improveFriendshipWithEveryoneInRegion(Game1.player, bonusPoints, 2);
                 this.Monitor.Log($"Gained {bonusPoints} friendship with everyone for shipping new items.", LogLevel.Info);
             }
+
+            // save player data
+            if (Context.IsMainPlayer)
+                this.Helper.Data.WriteSaveData("data", this.PlayerData);
         }
 
         /// <summary>Get all available characters.</summary>
