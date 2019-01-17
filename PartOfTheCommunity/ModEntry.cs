@@ -229,7 +229,7 @@ namespace PartOfTheCommunity
                     if (!relation.Character.TryGetNpc(out NPC relationNpc))
                         continue;
 
-                    if (relation.Relationship != "Friend")
+                    if (relation.IsFamily)
                     {
                         Game1.player.changeFriendship(this.Config.UmojaBonusMarry, relationNpc);
                         this.Monitor.Log($"{relation}: Married into the family, received +{this.Config.UmojaBonusMarry} friendship", LogLevel.Info);
@@ -272,12 +272,12 @@ namespace PartOfTheCommunity
             // extended family bonus for gifting spouse/child
             if (!string.IsNullOrWhiteSpace(Game1.player.spouse) && this.Characters.TryGetValue(Game1.player.Name, out CharacterInfo player) && this.Characters.TryGetValue(Game1.player.spouse, out CharacterInfo spouse))
             {
-                bool giftedFamily = player.Relationships.Any(p => p.Character.ReceivedGift && p.Relationship != "Friend" && p.Relationship != "Wartorn");
+                bool giftedFamily = player.Relationships.Any(p => p.Character.ReceivedGift && p.IsFamily);
                 if (giftedFamily)
                 {
                     foreach (CharacterRelationship relation in spouse.Relationships)
                     {
-                        if (relation.Character.TryGetNpc(out NPC relationNpc) && relation.Relationship != "Friend" && relation.Relationship != "Wartorn")
+                        if (relation.Character.TryGetNpc(out NPC relationNpc) && relation.IsFamily)
                         {
                             Game1.player.changeFriendship(this.Config.UmojaBonus, relationNpc);
                             this.Monitor.Log($"{relation}: Friendship raised {this.Config.UmojaBonus} for loving your family.", LogLevel.Info);
@@ -364,41 +364,41 @@ namespace PartOfTheCommunity
                 var willy = new CharacterInfo("Willy", isMale: true);
 
                 // Caroline's family
-                this.AddRelationship(caroline, "Mother", abigail, "Daughter");
-                this.AddRelationship(caroline, "Wife", pierre, "Husband");
-                this.AddRelationship(pierre, "Father", abigail, "Daughter");
+                this.AddRelationship(caroline, Relationship.Mother, abigail, Relationship.Daughter);
+                this.AddRelationship(caroline, Relationship.Wife, pierre, Relationship.Husband);
+                this.AddRelationship(pierre, Relationship.Father, abigail, Relationship.Daughter);
 
                 // Emily's family
-                this.AddRelationship(haley, "Sister", emily, "Sister");
+                this.AddRelationship(haley, Relationship.Sister, emily, Relationship.Sister);
 
                 // Evelyn's family
-                this.AddRelationship(evelyn, "Grandmother", alex, "Grandson");
-                this.AddRelationship(evelyn, "Wife", george, "Husband");
-                this.AddRelationship(george, "Grandfather", alex, "Grandson");
+                this.AddRelationship(evelyn, Relationship.Grandmother, alex, Relationship.Grandson);
+                this.AddRelationship(evelyn, Relationship.Wife, george, Relationship.Husband);
+                this.AddRelationship(george, Relationship.Grandfather, alex, Relationship.Grandson);
 
                 // Jodi's family
-                this.AddRelationship(jodi, "Mother", sam, "Son");
-                this.AddRelationship(jodi, "Mother", vincent, "Son");
-                this.AddRelationship(jodi, "Wife", kent, "Husband");
-                this.AddRelationship(kent, "Father", sam, "Son");
-                this.AddRelationship(kent, "Father", vincent, "Son");
-                this.AddRelationship(sam, "Brother", vincent, "Brother");
+                this.AddRelationship(jodi, Relationship.Mother, sam, Relationship.Son);
+                this.AddRelationship(jodi, Relationship.Mother, vincent, Relationship.Son);
+                this.AddRelationship(jodi, Relationship.Wife, kent, Relationship.Husband);
+                this.AddRelationship(kent, Relationship.Father, sam, Relationship.Son);
+                this.AddRelationship(kent, Relationship.Father, vincent, Relationship.Son);
+                this.AddRelationship(sam, Relationship.Brother, vincent, Relationship.Brother);
 
                 // Marnie's family
-                this.AddRelationship(marnie, "Aunt", jas, "Niece");
-                this.AddRelationship(marnie, "Aunt", shane, "Nephew");
-                this.AddRelationship(jas, "Goddaughter", shane, "Godfather");
+                this.AddRelationship(marnie, Relationship.Aunt, jas, Relationship.Niece);
+                this.AddRelationship(marnie, Relationship.Aunt, shane, Relationship.Nephew);
+                this.AddRelationship(jas, Relationship.Goddaughter, shane, Relationship.Godfather);
 
                 // Pam's family
-                this.AddRelationship(pam, "Mother", penny, "Daughter");
+                this.AddRelationship(pam, Relationship.Mother, penny, Relationship.Daughter);
 
                 // Robin's family
-                this.AddRelationship(robin, "Mother", maru, "Daughter");
-                this.AddRelationship(robin, "Mother", sebastian, "Son");
-                this.AddRelationship(robin, "Wife", demetrius, "Husband");
-                this.AddRelationship(demetrius, "Father", maru, "Daughter");
-                this.AddRelationship(demetrius, "Step-Father", sebastian, "Step-Son");
-                this.AddRelationship(maru, "Half-Sister", sebastian, "Half-Brother");
+                this.AddRelationship(robin, Relationship.Mother, maru, Relationship.Daughter);
+                this.AddRelationship(robin, Relationship.Mother, sebastian, Relationship.Son);
+                this.AddRelationship(robin, Relationship.Wife, demetrius, Relationship.Husband);
+                this.AddRelationship(demetrius, Relationship.Father, maru, Relationship.Daughter);
+                this.AddRelationship(demetrius, Relationship.StepFather, sebastian, Relationship.StepSon);
+                this.AddRelationship(maru, Relationship.HalfSister, sebastian, Relationship.HalfBrother);
 
                 // friends
                 this.AddFriend(abigail, sam);
@@ -420,7 +420,7 @@ namespace PartOfTheCommunity
                 this.AddFriend(sam, sebastian);
 
                 // other
-                this.AddRelationship(dwarf, "Wartorn", krobus, "Wartorn");
+                this.AddRelationship(dwarf, Relationship.WarTorn, krobus, Relationship.WarTorn);
 
                 return new[]
                 {
@@ -497,46 +497,44 @@ namespace PartOfTheCommunity
                 characters[child.Name] = child;
 
                 // add relationships
-                this.AddRelationship(player, player.IsMale ? "Father" : "Mother", child, child.IsMale ? "Son" : "Daughter");
+                this.AddRelationship(player, player.IsMale ? Relationship.Father : Relationship.Mother, child, child.IsMale ? Relationship.Son : Relationship.Daughter);
                 if (spouse != null)
                 {
                     foreach (CharacterRelationship parentRelation in spouse.Relationships)
                     {
                         switch (parentRelation.Relationship)
                         {
-                            case "Grandfather":
-                            case "Grandmother":
-                                this.AddRelationship(child, $"Great-Grand{(child.IsMale ? "son" : "daughter")}", parentRelation.Character, $"Great-{parentRelation.Relationship}");
+                            case Relationship.Grandfather:
+                            case Relationship.Grandmother:
+                                this.AddRelationship(child, child.IsMale ? Relationship.GreatGrandson : Relationship.GreatGranddaughter, parentRelation.Character, parentRelation.Character.IsMale ? Relationship.GreatGrandfather : Relationship.GreatGrandmother);
                                 break;
 
-                            case "Father":
-                            case "Mother":
-                            case "Step-Father":
-                            case "Step-Mother":
-                                this.AddRelationship(child, $"Grand{(child.IsMale ? "son" : "daughter")}", parentRelation.Character, $"Grand{(parentRelation.Character.IsMale ? "father" : "mother")}");
+                            case Relationship.Father:
+                            case Relationship.Mother:
+                            case Relationship.StepFather:
+                            case Relationship.StepMother:
+                                this.AddRelationship(child, child.IsMale ? Relationship.Grandson : Relationship.Granddaughter, parentRelation.Character, parentRelation.Character.IsMale ? Relationship.Grandfather : Relationship.Grandmother);
                                 break;
 
-                            case "Brother":
-                            case "Sister":
-                            case "Half-Brother":
-                            case "Half-Sister":
-                            case "Step-Brother":
-                            case "Step-Sister":
-                                this.AddRelationship(child, child.IsMale ? "Nephew" : "Niece", parentRelation.Character, parentRelation.Character.IsMale ? "Uncle" : "Aunt");
+                            case Relationship.Brother:
+                            case Relationship.Sister:
+                            case Relationship.HalfBrother:
+                            case Relationship.HalfSister:
+                                this.AddRelationship(child, child.IsMale ? Relationship.Nephew : Relationship.Niece, parentRelation.Character, parentRelation.Character.IsMale ? Relationship.Uncle : Relationship.Aunt);
                                 break;
 
-                            case "Niece":
-                            case "Nephew":
-                                this.AddRelationship(child, "Cousin", parentRelation.Character, "Cousin");
+                            case Relationship.Niece:
+                            case Relationship.Nephew:
+                                this.AddRelationship(child, Relationship.Cousin, parentRelation.Character, Relationship.Cousin);
                                 break;
 
-                            case "Son":
-                            case "Daughter":
-                                this.AddRelationship(child, child.IsMale ? "Brother" : "Sister", parentRelation.Character, parentRelation.Character.IsMale ? "Brother" : "Sister");
+                            case Relationship.Son:
+                            case Relationship.Daughter:
+                                this.AddRelationship(child, child.IsMale ? Relationship.Brother : Relationship.Sister, parentRelation.Character, parentRelation.Character.IsMale ? Relationship.Brother : Relationship.Sister);
                                 break;
                         }
                     }
-                    this.AddRelationship(spouse, spouse.IsMale ? "Father" : "Mother", child, child.IsMale ? "Son" : "Daughter");
+                    this.AddRelationship(spouse, spouse.IsMale ? Relationship.Father : Relationship.Mother, child, child.IsMale ? Relationship.Son : Relationship.Daughter);
                 }
             }
 
@@ -548,7 +546,7 @@ namespace PartOfTheCommunity
         /// <param name="leftType">The left relationship type (i.e. <paramref name="left"/> is the _____ of <paramref name="right"/>).</param>
         /// <param name="right">The right NPC.</param>
         /// <param name="rightType">The right relationship type (i.e. <paramref name="right"/> is the _____ of <paramref name="left"/>).</param>
-        private void AddRelationship(CharacterInfo left, string leftType, CharacterInfo right, string rightType)
+        private void AddRelationship(CharacterInfo left, Relationship leftType, CharacterInfo right, Relationship rightType)
         {
             left.AddRelationship(rightType, right);
             right.AddRelationship(leftType, left);
@@ -559,7 +557,7 @@ namespace PartOfTheCommunity
         /// <param name="right">The right NPC.</param>
         private void AddFriend(CharacterInfo left, CharacterInfo right)
         {
-            this.AddRelationship(left, "Friend", right, "Friend");
+            this.AddRelationship(left, Relationship.Friend, right, Relationship.Friend);
         }
     }
 }

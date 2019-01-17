@@ -56,7 +56,7 @@ namespace PartOfTheCommunity.Framework
         /// <summary>Add a relationship to another NPC.</summary>
         /// <param name="relationship">The target character's relationship to the original character (like 'Mother').</param>
         /// <param name="character">The target character.</param>
-        public void AddRelationship(string relationship, CharacterInfo character)
+        public void AddRelationship(Relationship relationship, CharacterInfo character)
         {
             this.Relationships.Add(new CharacterRelationship(relationship, character));
         }
