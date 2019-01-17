@@ -41,6 +41,7 @@
   <ItemGroup>
     <Compile Include="Framework\CharacterRelationship.cs" />
     <Compile Include="Framework\CharacterInfo.cs" />
+    <Compile Include="Framework\CharacterType.cs" />
     <Compile Include="ModConfig.cs" />
     <Compile Include="ModEntry.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -90,8 +90,7 @@ namespace PartOfTheCommunity
                     int bonusPoints = this.Config.UjimaBonus * this.CurrentNumberOfCompletedBundles;
                     foreach (CharacterInfo shopkeeper in this.Characters.Values.Where(p => p.IsShopOwner))
                     {
-                        NPC npc = Game1.getCharacterFromName(shopkeeper.Name, true);
-                        if (npc != null)
+                        if (shopkeeper.TryGetNpc(out NPC npc))
                             Game1.player.changeFriendship(bonusPoints, npc);
                     }
                     this.Monitor.Log($"Gained {bonusPoints} friendship from all store owners for completing {this.CurrentNumberOfCompletedBundles} {(this.CurrentNumberOfCompletedBundles > 1 ? "Bundles" : "Bundle")}", LogLevel.Info);
@@ -142,9 +141,6 @@ namespace PartOfTheCommunity
             {
                 // get friend info
                 if (!this.Characters.TryGetValue(pair.Key, out CharacterInfo friend))
-                    continue;
-                NPC friendNpc = Game1.getCharacterFromName(pair.Key, true);
-                if (friendNpc == null)
                     continue;
 
                 // get friendship
@@ -202,8 +198,7 @@ namespace PartOfTheCommunity
                 if (!shopkeeper.HasShopped && this.Helper.Reflection.GetField<Item>(shopMenu, "heldItem").GetValue() != null)
                 {
                     shopkeeper.HasShopped = true;
-                    NPC shopkeeperNpc = Game1.getCharacterFromName(shopOwnerName);
-                    if (shopkeeperNpc != null)
+                    if (shopkeeper.TryGetNpc(out NPC shopkeeperNpc))
                     {
                         Game1.player.changeFriendship(this.Config.UjamaaBonus, shopkeeperNpc);
                         this.Monitor.Log($"{shopOwnerName}: Pleasure doing business with you!", LogLevel.Info);
@@ -219,9 +214,8 @@ namespace PartOfTheCommunity
                 {
                     string name = pair.Key;
                     Friendship friendship = pair.Value;
-                    NPC character = Game1.getCharacterFromName(name);
-                    if (character != null && object.ReferenceEquals(character.currentLocation, Game1.currentLocation))
-                        character.doEmote(friendship.IsDivorced() ? 12 : 32);
+                    if (this.Characters.TryGetValue(name, out CharacterInfo character) && character.TryGetNpc(out NPC npc) && object.ReferenceEquals(npc.currentLocation, Game1.currentLocation))
+                        npc.doEmote(friendship.IsDivorced() ? Character.angryEmote : Character.happyEmote);
                 }
                 this.Monitor.Log("The villagers are glad you came!", LogLevel.Info);
                 this.HasEnteredEvent = true;
@@ -232,8 +226,7 @@ namespace PartOfTheCommunity
             {
                 foreach (CharacterRelationship relation in spouse.Relationships)
                 {
-                    NPC relationNpc = Game1.getCharacterFromName(relation.Character.Name);
-                    if (relationNpc == null)
+                    if (!relation.Character.TryGetNpc(out NPC relationNpc))
                         continue;
 
                     if (relation.Relationship != "Friend")
@@ -264,8 +257,7 @@ namespace PartOfTheCommunity
             // bonus for giving gifts to an NPC's friend/relative
             foreach (CharacterInfo character in this.Characters.Values)
             {
-                NPC npc = Game1.getCharacterFromName(character.Name);
-                if (npc == null)
+                if (character.TryGetNpc(out NPC npc))
                     continue;
 
                 // gifted relations bonus
@@ -285,8 +277,7 @@ namespace PartOfTheCommunity
                 {
                     foreach (CharacterRelationship relation in spouse.Relationships)
                     {
-                        NPC relationNpc = Game1.getCharacterFromName(relation.Character.Name);
-                        if (relationNpc != null && relation.Relationship != "Friend" && relation.Relationship != "Wartorn")
+                        if (relation.Character.TryGetNpc(out NPC relationNpc) && relation.Relationship != "Friend" && relation.Relationship != "Wartorn")
                         {
                             Game1.player.changeFriendship(this.Config.UmojaBonus, relationNpc);
                             this.Monitor.Log($"{relation}: Friendship raised {this.Config.UmojaBonus} for loving your family.", LogLevel.Info);
@@ -304,8 +295,7 @@ namespace PartOfTheCommunity
                 int bonusPoints = this.Config.UjimaBonus * newBundles;
                 foreach (CharacterInfo shopkeeper in this.Characters.Values.Where(p => p.IsShopOwner))
                 {
-                    NPC shopkeeperNpc = Game1.getCharacterFromName(shopkeeper.Name);
-                    if (shopkeeperNpc != null)
+                    if (shopkeeper.TryGetNpc(out NPC shopkeeperNpc))
                         Game1.player.changeFriendship(bonusPoints, shopkeeperNpc);
                 }
                 this.Monitor.Log($"Gained {bonusPoints} friendship with all store owners for completing {newBundles} bundles today.", LogLevel.Info);
@@ -476,7 +466,7 @@ namespace PartOfTheCommunity
             }
 
             // add player
-            var player = new CharacterInfo(Game1.player.Name, isMale: Game1.player.IsMale);
+            var player = new CharacterInfo(Game1.player.Name, isMale: Game1.player.IsMale, type: CharacterType.Player);
             characters[player.Name] = player;
 
             // add player spouse
@@ -496,7 +486,7 @@ namespace PartOfTheCommunity
             foreach (NPC npc in allCharacters)
             {
                 if (npc.isVillager() && !characters.ContainsKey(npc.Name))
-                    characters[npc.Name] = new CharacterInfo(npc.Name, npc.Gender == NPC.male);
+                    characters[npc.Name] = new CharacterInfo(npc.Name, npc.Gender == NPC.male, type: CharacterType.Child);
             }
 
             // add children

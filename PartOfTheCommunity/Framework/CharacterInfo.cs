@@ -1,4 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using StardewValley;
 
 namespace PartOfTheCommunity.Framework
 {
@@ -8,6 +11,9 @@ namespace PartOfTheCommunity.Framework
         /*********
         ** Accessors
         *********/
+        /// <summary>The character type.</summary>
+        public CharacterType Type { get; }
+
         /// <summary>The NPC name.</summary>
         public string Name { get; }
 
@@ -39,10 +45,12 @@ namespace PartOfTheCommunity.Framework
         /// <summary>Construct an instance.</summary>
         /// <param name="isMale">Whether the NPC is male.</param>
         /// <param name="name">The NPC name.</param>
-        public CharacterInfo(string name, bool isMale)
+        /// <param name="type">The character type.</param>
+        public CharacterInfo(string name, bool isMale, CharacterType type = CharacterType.Villager)
         {
             this.Name = name;
             this.IsMale = isMale;
+            this.Type = type;
         }
 
         /// <summary>Add a relationship to another NPC.</summary>
@@ -51,6 +59,45 @@ namespace PartOfTheCommunity.Framework
         public void AddRelationship(string relationship, CharacterInfo character)
         {
             this.Relationships.Add(new CharacterRelationship(relationship, character));
+        }
+
+        /// <summary>Get the in-game instance for this character.</summary>
+        /// <param name="npc">The in-game instance for this character.</param>
+        /// <returns>Returns whether the NPC was found.</returns>
+        public bool TryGetInstance(out Character npc)
+        {
+            switch (this.Type)
+            {
+                case CharacterType.Villager:
+                    npc = Game1.getCharacterFromName(this.Name, mustBeVillager: true);
+                    return npc != null;
+
+                case CharacterType.Player:
+                    npc = this.Name == Game1.player.Name ? Game1.player : null;
+                    return npc != null;
+
+                case CharacterType.Child:
+                    npc = Game1.player.getChildren().FirstOrDefault(p => p.Name == this.Name);
+                    return npc != null;
+
+                default:
+                    throw new NotSupportedException($"Unknown character type {this.Type} for NPC {this.Name}.");
+            }
+        }
+
+        /// <summary>Get the NPC for this character.</summary>
+        /// <param name="npc">The NPC for this character.</param>
+        /// <returns>Returns whether the NPC was found.</returns>
+        public bool TryGetNpc(out NPC npc)
+        {
+            if (this.TryGetInstance(out Character character) && character is NPC instance)
+            {
+                npc = instance;
+                return true;
+            }
+
+            npc = null;
+            return false;
         }
     }
 }
