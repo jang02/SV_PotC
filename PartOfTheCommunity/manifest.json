@@ -5,6 +5,6 @@
   "Description": "Lets you increase friendship by supporting the community.",
   "UniqueID": "SB_PotC",
   "EntryDll": "PartOfTheCommunity.dll",
-  "MinimumApiVersion": "2.8",
+  "MinimumApiVersion": "2.10.1",
   "UpdateKeys": [ "Nexus:923" ]
 }

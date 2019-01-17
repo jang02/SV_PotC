@@ -52,23 +52,29 @@ namespace PartOfTheCommunity
         /// <param name="helper">Provides simplified APIs for writing mods.</param>
         public override void Entry(IModHelper helper)
         {
-            GameEvents.UpdateTick += this.ModUpdate;
-            TimeEvents.AfterDayStarted += this.StartTracking;
-            SaveEvents.AfterReturnToTitle += this.Reset;
-            SaveEvents.BeforeSave += this.EndOfDayUpdate;
-            SaveEvents.AfterSave += this.SaveConfigFile;
+            helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
+            helper.Events.GameLoop.DayStarted += this.OnDayStarted;
+            helper.Events.GameLoop.ReturnedToTitle += this.OnReturnedToTitle;
+            helper.Events.GameLoop.Saving += this.OnSaving;
+            helper.Events.GameLoop.Saved += this.OnSaved;
         }
 
 
         /*********
         ** Private methods
         *********/
-        private void SaveConfigFile(object sender, EventArgs e)
+        /// <summary>Raised after the game finishes writing data to the save file (except the initial save creation).</summary>
+        /// <param name="sender">The event sender.</param>
+        /// <param name="e">The event data.</param>
+        private void OnSaved(object sender, SavedEventArgs e)
         {
             this.Helper.Data.WriteJsonFile($"{Constants.SaveFolderName}/config.json", this.Config);
         }
 
-        private void StartTracking(object sender, EventArgs e)
+        /// <summary>Raised after the game begins a new day (including when the player loads a save).</summary>
+        /// <param name="sender">The event sender.</param>
+        /// <param name="e">The event data.</param>
+        private void OnDayStarted(object sender, DayStartedEventArgs e)
         {
             // refresh data
             this.Characters = this.GetCharacters();
@@ -108,7 +114,10 @@ namespace PartOfTheCommunity
             }
         }
 
-        private void Reset(object sender, EventArgs e)
+        /// <summary>Raised after the game returns to the title screen.</summary>
+        /// <param name="sender">The event sender.</param>
+        /// <param name="e">The event data.</param>
+        private void OnReturnedToTitle(object sender, ReturnedToTitleEventArgs e)
         {
             this.IsReady = false;
             this.Config = null;
@@ -132,7 +141,10 @@ namespace PartOfTheCommunity
             return charactersWithinDistance;
         }
 
-        private void ModUpdate(object sender, EventArgs e)
+        /// <summary>Raised after the game state is updated (≈60 times per second).</summary>
+        /// <param name="sender">The event sender.</param>
+        /// <param name="e">The event data.</param>
+        private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
         {
             if (!Context.IsWorldReady || !this.IsReady)
                 return;
@@ -252,7 +264,10 @@ namespace PartOfTheCommunity
             }
         }
 
-        private void EndOfDayUpdate(object sender, EventArgs e)
+        /// <summary>Raised before the game begins writes data to the save file (except the initial save creation).</summary>
+        /// <param name="sender">The event sender.</param>
+        /// <param name="e">The event data.</param>
+        private void OnSaving(object sender, SavingEventArgs e)
         {
             // bonus for giving gifts to an NPC's friend/relative
             foreach (CharacterInfo character in this.Characters.Values)
