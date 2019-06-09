@@ -1,4 +1,4 @@
-﻿namespace SB_PotC
+﻿namespace PartOfTheCommunity.Framework
 {
     internal class ModConfig
     {
@@ -14,7 +14,5 @@
         public int UjimaBonusStore { get; set; } = 20;
         public int UjimaBonus { get; set; } = 2;
         public int KuumbaBonus { get; set; } = 2;
-        public bool HasGottenInitialUjimaBonus { get; set; }
-        public bool HasGottenInitialKuumbaBonus { get; set; }
     }
 }
