@@ -1,0 +1,6 @@
+C:\Users\Courtney\Documents\Stardew\Modding\Mod Tools\SV_PotC-master\PartOfTheCommunity\bin\Debug\PartOfTheCommunity.dll
+C:\Users\Courtney\Documents\Stardew\Modding\Mod Tools\SV_PotC-master\PartOfTheCommunity\bin\Debug\PartOfTheCommunity.pdb
+C:\Users\Courtney\Documents\Stardew\Modding\Mod Tools\SV_PotC-master\PartOfTheCommunity\obj\Debug\PartOfTheCommunity.csprojAssemblyReference.cache
+C:\Users\Courtney\Documents\Stardew\Modding\Mod Tools\SV_PotC-master\PartOfTheCommunity\obj\Debug\PartOfTheCommunity.csproj.CoreCompileInputs.cache
+C:\Users\Courtney\Documents\Stardew\Modding\Mod Tools\SV_PotC-master\PartOfTheCommunity\obj\Debug\PartOfTheCommunity.dll
+C:\Users\Courtney\Documents\Stardew\Modding\Mod Tools\SV_PotC-master\PartOfTheCommunity\obj\Debug\PartOfTheCommunity.pdb
