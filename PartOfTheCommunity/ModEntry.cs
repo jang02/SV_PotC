@@ -134,7 +134,7 @@ namespace PartOfTheCommunity
         {
             this.IsReady = false;
             this.PlayerData = null;
-            this.Characters = this.GetCharacters();
+            this.Characters = null;
             this.HasEnteredEvent = false;
             this.HasRecentlyCompletedQuest = false;
             this.CurrentNumberOfCompletedBundles = 0;
