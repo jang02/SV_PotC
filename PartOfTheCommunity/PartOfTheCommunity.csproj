@@ -8,11 +8,14 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>PartOfTheCommunity</RootNamespace>
     <AssemblyName>PartOfTheCommunity</AssemblyName>
+	<AssemblyTitle>PartOfTheCommunity</AssemblyTitle>
+	<ProductName>PartOfTheCommunity</ProductName>
 	<Version>1.2.0</Version>
+	<AssemblyVersion>1.2.0.0</AssemblyVersion>
 	<LangVersion>Latest</LangVersion>
     <TargetFramework>net6.0</TargetFramework>
     <FileAlignment>512</FileAlignment>
-    <ModFolderName>SB_PotC</ModFolderName>
+    <ModFolderName>PartOfTheCommunity</ModFolderName>
     <TargetFrameworkProfile />
   </PropertyGroup>
 	
@@ -47,9 +50,5 @@
   <ItemGroup>
     <None Include="manifest.json" />
   </ItemGroup>
-	
-  <ItemGroup>
-    <Folder Include="Properties\" />
-  </ItemGroup>
-	
+		
 </Project>
